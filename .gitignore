@@ -1,0 +1,9 @@
+*.pickle
+FIT/
+mpfit/
+PCIanalysis/
+IO/
+pyversion/
+pybaseutils/
+PCIanalysis-develop/
+__pycache__/
