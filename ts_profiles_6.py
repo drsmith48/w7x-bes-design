@@ -32,7 +32,7 @@ profiles_list = [
 #                 [180919007, 2.4, 'during NBI'],
 #                 [180919007, 3.2, 'post-NBI'],
 #                 [180925033, 0.65, 'low density'],
-####                 [180925033, 3.9, 'high density'],
+#                 [180925033, 3.9, 'high density'],
                 ]
 profiles_default = [{'shot':p[0], 'time':p[1], 'desc':p[2]} for p in profiles_list]
 
@@ -60,70 +60,72 @@ f/a = prof1/a + prof2
    {x element R}
 """
 
-def feval(c, x, nohollow=True):
-    if nohollow:
-        yfit = c[0] * (c[1] + (1-c[1])*(1-np.abs(x)**c[2])**c[3])
-    else:
-        yfit = c[0] * (c[1] - c[4] + (1-c[1]+c[4])*(1-np.abs(x)**c[2])**c[3] + \
-                     c[4]*(1-np.exp(-(x**2)/(c[5]**2))))
-    return yfit
-
-def residuals(c, x, yresample, nohollow=True):
-    # input: 1d array of n fit parameters
-    # output: 1d array of m residuals: y - yfit
-    yfit = feval(c, x/x.max(), nohollow=nohollow)
-    res = yfit - yresample
-    return res.reshape(res.size)
-
 def fit_ts(profiles=profiles_default,   # list of dictionaries, like profiles_default
            noplot=False,                # plot results to screen?
-           savefig=False,                # save EPS figures?
+           save_figs=False,               # save EPS figures?
            save_profile_data=False,     # save TS profile data?
-           ):            # save fit coefficients?
-
-    # other controls
-    edgecut = 2
-    nresamples = 5
-    nfits = 60
-    nohollow = False
-    
+           save_fits=False,              # save best fits?
+           nohollow=False):             # prohibit hollow core?
+    # sub-functions
+    def feval(c, x, nohollow):
+        if nohollow:
+            yfit = c[0] * (c[1] + (1-c[1])*(1-np.abs(x)**c[2])**c[3])
+        else:
+            yfit = c[0] * (c[1] - c[4] + (1-c[1]+c[4])*(1-np.abs(x)**c[2])**c[3] + \
+                         c[4]*(1-np.exp(-(x**2)/(c[5]**2))))
+        return yfit
+    def residuals(c, x, yresample, nohollow):
+        # input: 1d array of n fit parameters
+        # output: 1d array of m residuals: y - yfit
+        yfit = feval(c, x/x.max(), nohollow=nohollow)
+        res = yfit - yresample
+        return res.reshape(res.size)
+    # other settings
+    edgecut=2
+    nfits=60
+    nresample=5
     # try loading pickled data
-    datafile = 'ts_data.pickle'
+    ts_datafile = 'ts_data.pickle'
     try:
-        with open(datafile, 'rb') as f:
+        with open(ts_datafile, 'rb') as f:
             profile_data = pickle.load(f)
         assert(isinstance(profile_data, dict))
         print('Pickle load successful')
+        for key in profile_data.keys():
+            print('  {}'.format(key))
     except:
         profile_data = {}
         print('Pickle load unsuccessful, continuing')
-
     # loop over profile instances
     previous_shot = -1
     tsdata = None
-    for ipro,pro in enumerate(profiles):
+    goodfits = []
+    for shottime in profiles:
+        shot = shottime['shot']
+        time = shottime['time']
+        description = shottime['desc']
         # load/fetch data
-        if pro['shot'] != previous_shot:
+        if shot != previous_shot:
             try:
-                raise KeyError
-                tsdata = profile_data[pro['shot']]
+                # raise KeyError
+                tsdata = profile_data[shot]
                 print('Extracting MPTS data from {}, shot {}'.
-                      format(datafile, pro['shot']))
+                      format(ts_datafile, shot))
             except KeyError:
-                print('Fetching MPTS data, shot {}'.format(pro['shot']))
-                tsdata = gl.get_thomsondata(pro['shot'])
-                profile_data[pro['shot']] = tsdata
+                print('Fetching MPTS data, shot {}'.format(shot))
+                tsdata = gl.get_thomsondata(shot)
+                profile_data[shot] = tsdata
         # unpack data
-        time = tsdata['time']/1e9
-        index = np.argmin(np.abs(time - pro['time']))
+        index = np.argmin(np.abs(tsdata['time']/1e9 - time))
         ts_time = tsdata['time'][index]/1e9
+        goodfits_shot = shottime.copy()
         # begin loop over ne/te fields
         for field in ['ne','te']:
             x = tsdata['roa'].copy()
             y = tsdata[field][index,:]
             yerr = tsdata['{}_err'.format(field)][index,:]
             print('{} profile fit, shot {}, time {:.2f} s ...'.
-                  format(field, pro['shot'], ts_time))
+                  format(field, shot, ts_time))
             # cut edge channels
             if edgecut:
                 x = x[:-edgecut]
@@ -144,20 +146,20 @@ def fit_ts(profiles=profiles_default,   # list of dictionaries, like profiles_de
             x = x[:,np.newaxis]
             y = y[:,np.newaxis]
             yerr = yerr[:,np.newaxis]
-            # plot profile
+            goodfits_shot[field+'rawdata'] = {'x':x, 'y':y, 'yerr':yerr}
+            # plot raw data and uncertainties
             plt.figure(figsize=(7.66,3.25))
-            title = '{} | {:.2f} s | {}'.format(pro['shot'],ts_time,pro['desc'])
             plt.subplot(1,2,1)
             plt.errorbar(x, y, yerr=yerr, fmt='x')
             plt.xlabel('r/a')
             plt.ylabel(field)
             plt.ylim(0,None)
-            plt.title(title)
+            plt.title('{} | {:.2f} s | {}'.format(shot,ts_time,description))
             # least squares fitting, optimized with Numba
             ymax = np.max(y[x<=0.5])
             c0 = np.array([  ymax, 0.01, 1.1, 1.5,  0,   0.25])
-            lb = np.array([ymax/2, 1e-3, 0.3, 0.3, -0.3, 0.2])
-            ub = np.array([ymax*2, 0.05, 4.0, 4.0,  0.3, 0.5])
+            lb = np.array([ymax/2, 1e-3, 0.3, 0.3, -0.25, 0.2])
+            ub = np.array([ymax*2, 0.06, 4.0, 4.0,  0.25, 0.5])
             x_scale = np.array([1,1e-2,0.1,0.1,5e-2,1e-2])
             if nohollow:
                 c0 = c0[0:4]
@@ -168,7 +170,7 @@ def fit_ts(profiles=profiles_default,   # list of dictionaries, like profiles_de
             wtsqerr = np.empty(0)
             for i in range(nfits):
                 # resample profile and fit
-                yresample = y + yerr*np.random.normal(size=(y.size,nresamples))
+                yresample = y + yerr*np.random.normal(size=(y.size,nresample))
                 result = opt.least_squares(residuals, c0, 
                                            jac='3-point', 
                                            bounds=(lb,ub),
@@ -184,16 +186,19 @@ def fit_ts(profiles=profiles_default,   # list of dictionaries, like profiles_de
                     cf = result.x
                     cresults = np.append(cresults, cf[...,np.newaxis], axis=1)
                     yfit = feval(cf, x/x.max(), nohollow=nohollow)
+                    # weighted squared error with raw data
                     err = np.sqrt(np.mean(np.arctan((yfit-y)/yerr/2)**2))
                     wtsqerr = np.append(wtsqerr, err.reshape((-1)), axis=0)
-                    plt.plot(x, yfit, 
-                             color='C1', 
-                             linewidth=0.5)
+                    # plot fit to resampled data
+                    plt.plot(x, yfit, color='C1', linewidth=0.5)
             ibestfit = np.argsort(wtsqerr)[:3]
+            fieldfits = []
             for i in ibestfit:
-                print(wtsqerr[i], x.max(), cresults[:,i])
                 ybestfit = feval(cresults[:,i], x/x.max(), nohollow=nohollow)
+                # plot best resampled fits
                 plt.plot(x, ybestfit, color='C2', linewidth=2)
+                fieldfits.append({'x':x, 'y':ybestfit, 'coeff':cresults[:,i]})
+            goodfits_shot[field+'fits'] = fieldfits
             plt.subplot(1,2,2)
             for i in [0,1,2,3,4,5]:
                 plt.plot([i,i], [lb[i],ub[i]], '_', 
@@ -212,46 +217,29 @@ def fit_ts(profiles=profiles_default,   # list of dictionaries, like profiles_de
             plt.yscale('log')
             plt.xlabel('fit coefficients')
             plt.tight_layout()
-            if savefig:
-                filename = 'fit_{}_{:.0f}ms_{}.pdf'.format(
-                        pro['shot'],ts_time*1e3, field)
+            if save_figs:
+                filename = 'fit_{}_{:.0f}ms_{}.pdf'.format(shot,ts_time*1e3, field)
                 print('saving file: {}'.format(filename))
                 plt.savefig(filename, transparent=True)
-    # end loop over fields
-        previous_shot = pro['shot']
+        # end loop over fields
+        previous_shot = shot
+        goodfits.append(goodfits_shot)
     # end loop over profile instances
+    
+    if save_fits:
+        fits_datafile = 'ts_fits.pickle'
+        print('saving {}'.format(fits_datafile))
+        with open(fits_datafile, 'wb') as f:
+            pickle.dump(goodfits, f)
     
     # pickle profile data
     if save_profile_data:
-        with open(datafile, 'wb') as f:
+        with open(ts_datafile, 'wb') as f:
             pickle.dump(profile_data, f)
     
-    return
+    return goodfits
 
-
-# ne fits
-# x -> x / 1.14491
-#0.3832149491929913 [10.22178262  0.0267643   1.84138753  1.62809221  0.3         0.31130153]
-#0.38508911759246744 [10.21214233  0.01847742  1.62975576  1.4027948   0.29999999  0.2764953 ]
-#0.386183671976114 [10.29204212  0.02788882  1.52095351  1.37012837  0.3         0.28085452]
-#0.3862077999537648 [10.10663327  0.03604462  1.8833487   1.78035585  0.3         0.26743233]
-#0.3868888305656996 [10.46844203  0.03319377  1.60784881  1.47541005  0.3         0.31804642]
-#0.38729798392689213 [10.10015271  0.02180125  2.32219243  1.71327306  0.10866066  0.2       ]
-#0.3873835115462206 [10.31760281  0.03812322  1.74278578  1.6873627   0.3         0.26225392]
-#0.38752872535334737 [10.1175267   0.03805694  1.5673755   1.41982793  0.3         0.23777588]
-
-# te fits
-# x -> x / 1.09491
-#0.1598875948517293 [ 3.8076127   0.00651745  2.22383115  2.85146903 -0.20842746  0.20145577]
-#0.16498508346304566 [4.05836146 0.00731043 1.40823278 2.34001768 0.27358165 0.40837264]
-#0.16821321133894515 [3.91150558 0.0070859  1.40659832 2.29064216 0.29999997 0.41936713]
-#0.16892623670597592 [ 3.92132790e+00  1.00000000e-03  2.50898762e+00  3.02284032e+00 -3.00000000e-01  2.06457456e-01]
-#0.16914170144171506 [4.27291446e+00 1.55405235e-03 1.13168927e+00 2.06825377e+00 3.00000000e-01 2.93541719e-01]
-#0.17013981129440303 [3.87582258e+00 3.75811319e-03 1.39253322e+00 2.43313538e+00 3.00000000e-01 3.00983564e-01]
-#0.17176957913152938 [4.14899435 0.00823581 1.26460161 2.23564824 0.3        0.34519777]
-#0.17205778799237928 [4.08306349 0.00808071 1.37444638 2.39936535 0.29999964 0.33728493]
-#0.17255377507747327 [ 3.72028113  0.00811113  2.88445446  3.62993618 -0.3         0.2113322 ]
 
 if __name__=='__main__':
     plt.close('all')
-    fit_ts(savefig=False)
+    fits = fit_ts(save_figs=False, save_fits=False)

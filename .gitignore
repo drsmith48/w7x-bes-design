@@ -7,3 +7,5 @@ pyversion/
 pybaseutils/
 PCIanalysis-develop/
 __pycache__/
+.ipynb_checkpoints/
+*.pdf
