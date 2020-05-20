@@ -9,13 +9,8 @@ Created on Mon Jun 17 08:00:17 2019
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-import scipy.optimize as opt
-#from scipy.interpolate import InterpolatedUnivariateSpline as spline
-#import MDSplus as mds
-#from FIT.fitNL import fit_mpfit
-#from FIT.model_spec import model_qparab
+from scipy.optimize import least_squares
 import PCIanalysis.gradientlengths as gl
-#import pybaseutils.utils as ut
 
 plt.close('all')
 np.random.seed()
@@ -29,7 +24,7 @@ profiles_list = [
 #                 [180906040, 7.0, '2.5 MW ECH'],
 #                 [180906040, 9.5, '1.5 MW ECH'],
 #                 [180919007, 1.4, 'pre-NBI'],
-#                 [180919007, 2.4, 'during NBI'],
+                [180919007, 2.4, 'during NBI'],
 #                 [180919007, 3.2, 'post-NBI'],
 #                 [180925033, 0.65, 'low density'],
 #                 [180925033, 3.9, 'high density'],
@@ -171,17 +166,16 @@ def fit_ts(profiles=profiles_default,   # list of dictionaries, like profiles_de
             for i in range(nfits):
                 # resample profile and fit
                 yresample = y + yerr*np.random.normal(size=(y.size,nresample))
-                result = opt.least_squares(residuals, c0, 
-                                           jac='3-point', 
-                                           bounds=(lb,ub),
-                                           method='trf',
-                                           x_scale=x_scale,
-                                           loss='arctan',
-                                           f_scale=1.0,
-                                           verbose=0,
-                                           args=(x,yresample),
-                                           kwargs={'nohollow':nohollow},
-                                           )
+                result = least_squares(residuals, c0, 
+                                       jac='3-point', 
+                                       bounds=(lb,ub),
+                                       method='trf',
+                                       x_scale=x_scale,
+                                       loss='arctan',
+                                       f_scale=1.0,
+                                       verbose=0,
+                                       args=(x,yresample),
+                                       kwargs={'nohollow':nohollow})
                 if result.status > 0:
                     cf = result.x
                     cresults = np.append(cresults, cf[...,np.newaxis], axis=1)
@@ -199,6 +193,8 @@ def fit_ts(profiles=profiles_default,   # list of dictionaries, like profiles_de
                 plt.plot(x, ybestfit, color='C2', linewidth=2)
                 fieldfits.append({'x':x, 'y':ybestfit, 'coeff':cresults[:,i]})
             goodfits_shot[field+'fits'] = fieldfits
+            if field=='te':
+                plt.ylim([0,6])
             plt.subplot(1,2,2)
             for i in [0,1,2,3,4,5]:
                 plt.plot([i,i], [lb[i],ub[i]], '_', 

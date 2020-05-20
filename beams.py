@@ -832,12 +832,16 @@ class Sightline(object):
                     zcoeff[k,m,n] = vmec_zsincoeff.coefficients[icoeff]
         imin = np.argmin(np.abs(rarray-s_sl.min()))-3
         imax = np.argmin(np.abs(rarray-s_sl.max()))+3
-        rcoeff_interp = interpolate.CubicSpline(rarray[imin:imax], 
+        rcoeff_interp = interpolate.interp1d(rarray[imin:imax], 
                                              rcoeff[imin:imax,...], 
-                                             axis=0)
-        zcoeff_interp = interpolate.CubicSpline(rarray[imin:imax], 
+                                             axis=0,
+                                             kind='cubic',
+                                             assume_sorted=True)
+        zcoeff_interp = interpolate.interp1d(rarray[imin:imax], 
                                              zcoeff[imin:imax,...], 
-                                             axis=0)
+                                             axis=0,
+                                             kind='cubic',
+                                             assume_sorted=True)
         u_sl = theta_sl
         dphidv = 1/5
         v_sl = phi_sl / dphidv
