@@ -11,8 +11,6 @@ import matplotlib.pyplot as plt
 import vmec_connection
 import beams
 
-plt.close('all')
-
 # vmec connection
 vmec = vmec_connection.connection()
 

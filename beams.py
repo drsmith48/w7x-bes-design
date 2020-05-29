@@ -277,7 +277,12 @@ class _Beam(object):
         plt.tight_layout()
         # return validports
         
-    def plot_vertical_plane(self, port, eq_tag=None, save=False, sp1=None, sp2=None):
+    def plot_vertical_plane(self, 
+                            port='A21-lolo', 
+                            eq_tag=None, 
+                            save=False, 
+                            sp1=None, 
+                            sp2=None):
         if eq_tag is not None:
             self.set_eq(eq_tag=eq_tag)
         # B vector along beamline in plasma
@@ -312,6 +317,7 @@ class _Beam(object):
         vmec_bvec = vmec.service.magneticField(self.eq_tag, xyz_p3d)
         bvec = np.array([vmec_bvec.x1, vmec_bvec.x2, vmec_bvec.x3]).reshape(3,ngrid,ngrid)
         bnorm = np.linalg.norm(bvec, axis=0)
+        print(bnorm)
         b_hat = bvec / np.tile(bnorm, (3,1,1))
         b_angle = np.arccos(np.sum(sl_hat*b_hat, axis=0)) * 180/np.pi
         b_angle[np.isnan(b_angle)] = 90
@@ -322,7 +328,8 @@ class _Beam(object):
             plt.figure(figsize=[10.2,3.25])
             plt.subplot(1,2,1)
         plt.contourf(rmaj_values, z_values, b_angle,
-                     levels=np.linspace(0,15,6))
+                     levels=np.linspace(0,15,6),
+                     cmap=cm.viridis)
         plt.clim(0,15)
         plt.xlabel('R [m]')
         plt.ylabel('z [m]')
@@ -366,6 +373,7 @@ class _Beam(object):
                               r_obs=r_obs, 
                               z_obs=z_obs, 
                               eq_tag=eq_tag)
+        print(sl.bnorm)
         ### plot quantities along sl
         plt.figure(figsize=(12,8.25))
         plotdata = [[sl.r, 'R-major (m)'],
@@ -909,12 +917,10 @@ class Sightline(object):
         self.bhat = bunit_sl
         self.nhat = nhat
         self.bihat = bihat
+        self.bnorm = bnorm_sl
         self.cosn = cosn
         self.cosbi = cosbi
 
 
 if __name__=='__main__':
-    # test_heating_beams()
-    plt.close('all')
-    pini = HeatingBeam(pini=2)
-    pini.plot_sightline('A21-lolo', r_obs=5.8, z_obs=-0.4)
+    test_heating_beams()

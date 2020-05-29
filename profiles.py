@@ -16,6 +16,9 @@ c, d - aa[2],aa[3]-  pp, qq - power scaling parameters
 
 Y/Y0 = aa[1]-aa[4]+(1-aa[1]+aa[4])*(1-XX^aa[2])^aa[3]+aa[4]*(1-exp(-XX^2/aa[5]^2))
     XX - r/a
+    
+dydx = a0*( -a2*a3*x^a2*(1 - x^a2)^a3*(-a1 - a4 + 1)/(x*(1 - x^a2)) + \
+           2*a4*x*exp(-x^2/a5^2)/a5^2 )
 
 h, w - aa[4],aa[5]-  hh, ww - hole depth and width
 
@@ -39,13 +42,12 @@ import PCIanalysis.gradientlengths as gl
 import hdf5
 
 
-plt.close('all')
 np.random.seed()
 
 # shot/times for profiles
 profiles_list = [
                  [180904027, 1.9, 'post-pellet'],
-                 [180919007, 2.4, 'during NBI'],
+                 # [180919007, 2.4, 'during NBI'],
                 ]
 profiles_default = [{'shot':p[0], 'time':p[1], 'desc':p[2]} for p in profiles_list]
 
@@ -53,6 +55,7 @@ profiles_default = [{'shot':p[0], 'time':p[1], 'desc':p[2]} for p in profiles_li
 def fit_profiles(profiles=profiles_default,
                  noplot=False,
                  save_data=False,
+                 save_figures=False,
                  fit_kwargs={},
                  plot_kwargs={}):
     # sub-functions
@@ -63,6 +66,13 @@ def fit_profiles(profiles=profiles_default,
             yfit = c[0] * (c[1] - c[4] + (1-c[1]+c[4])*(1-np.abs(x)**c[2])**c[3] + \
                          c[4]*(1-np.exp(-(x**2)/(c[5]**2))))
         return yfit
+    def dfeval(c, x, nohollow):
+        if nohollow:
+            dyfit = -c[0] * ( -c[2]*c[3]*x**c[2]*(1 - np.abs(x)**c[2])**c[3] * (1-c[1])/(x*(1+1e-6 - np.abs(x)**c[2])))
+        else:
+            dyfit = -c[0] * ( -c[2]*c[3]*x**c[2]*(1 - np.abs(x)**c[2])**c[3] * (1-c[1]-c[4])/(x*(1+1e-6 - np.abs(x)**c[2])) + \
+                            2*c[4]*x*np.exp(-x**2/c[5]**2)/c[5]**2 )
+        return dyfit
     def residuals(c, x, yresample, nohollow):
         # input: 1d array of n fit parameters
         # output: 1d array of m residuals: y - yfit
@@ -73,17 +83,20 @@ def fit_profiles(profiles=profiles_default,
     prodatafile = 'profiles.pickle'
     prodata2 = {}
     fields = ['ne','te','ti']
+    labels = ['ne [1e13/cm^3]',
+              'Te [keV]',
+              'Ti [keV]']
     nohollow = False
     nresample=5
     ts_edgecut = 2
-    nfits = 50
+    nfits = 60
     for shottime in profiles:
         shot = shottime['shot']
         time = shottime['time']
         desc = shottime['desc']
         prodata2[shot] = {}
         plt.figure(figsize=(10,8))
-        for ifield,field in enumerate(fields):
+        for ifield,field,label in zip(range(len(fields)), fields, labels):
             print('Getting {} data for shot {:d}'.format(field, shot))
             if field in ['ne','te']:
                 try:
@@ -152,19 +165,33 @@ def fit_profiles(profiles=profiles_default,
                 x = rho[mask[tindex,:]]
                 y = ti[tindex,mask[tindex,:]]
                 yerr = tierr[tindex,mask[tindex,:]]
+                edgelim = 0.04*y.max()
+                if (y[-1]>edgelim) or (yerr[-1]>edgelim):
+                    x = np.append(x, np.max([1.05,x.max()+0.05]))
+                    y = np.append(y, edgelim)
+                    yerr = np.append(yerr, edgelim)
                 ymax = np.max(y[x<=0.5])
-                lb = np.array([ymax/2, 1e-3, 0.3, 0.3, -0.25, 0.2])
-                ub = np.array([ymax*2,  0.4, 6.0, 4.0,  0.25, 0.6])
+                lb = np.array([ymax/2, 1e-3, 0.3, 0.3, -0.15, 0.2])
+                ub = np.array([ymax*2,  0.4, 6.0, 4.0,  0.15, 0.6])
             x = x.reshape(-1,1)
             y = y.reshape(-1,1)
             yerr = yerr.reshape(-1,1)
-            plt.subplot(3,3,ifield*3+1)
+            xvals = np.linspace(0.05,x.max(),101)
+            axpro = plt.subplot(3,3,ifield*3+1)
+            axgrad = plt.subplot(3,3,ifield*3+2)
+            plt.sca(axpro)
             plt.errorbar(x, y, yerr=yerr, fmt='x')
             plt.xlabel('r/a')
-            plt.ylabel(field)
+            plt.ylabel(label)
             plt.ylim(0,None)
             plt.xlim(0,1.2)
             plt.title('{} | {:.2f} s | {}'.format(shot,timearray[tindex],desc))
+            plt.sca(axgrad)
+            plt.xlabel('r/a')
+            plt.ylabel('-d ln( {} )/dx'.format(label))
+            plt.title('{} | {:.2f} s | {}'.format(shot,timearray[tindex],desc))
+            plt.xlim(0,1.2)
+            plt.ylim(-5,15)
             # least squares fit
             c0 = np.array([  ymax, 0.01, 1.1, 1.5,  0,   0.25])
             x_scale = np.array([1,1e-2,0.1,0.1,5e-2,1e-2])
@@ -195,31 +222,34 @@ def fit_profiles(profiles=profiles_default,
                     # weighted squared error with raw data
                     err = np.sqrt(np.mean(np.arctan((yfit-y)/yerr/2)**2))
                     wtsqerr = np.append(wtsqerr, err.reshape((-1)))
-                    # plot fit to resampled data
-                    plt.plot(x, yfit, color='C1', linewidth=0.5)
-            ibest = np.argsort(wtsqerr)[:3]
-            for i in ibest:
-                yfit = feval(params[:,i], x/x.max(), nohollow=nohollow)
-                # plot best resampled fits
-                plt.plot(x, yfit, color='C2', linewidth=2)
-            plt.subplot(3,3,ifield*3+2)
-            for i in [0,1,2,3,4,5]:
-                plt.plot([i,i], [lb[i],ub[i]], '_', 
+            igood = np.nonzero(wtsqerr>=(np.median(wtsqerr)+wtsqerr.std()/2))[0]
+            for i in igood:
+                # plot fit to resampled data
+                yfit = feval(params[:,i], xvals/xvals.max(), nohollow=nohollow)
+                dyfit = dfeval(params[:,i], xvals/xvals.max(), nohollow=nohollow)
+                plt.sca(axpro)
+                plt.plot(xvals, yfit, color='C1', linewidth=0.5)
+                plt.sca(axgrad)
+                plt.plot(xvals, dyfit/yfit, color='C1', linewidth=0.5)
+            plt.subplot(3,3,ifield*3+3)
+            for icoeff in [0,1,2,3,4,5]:
+                plt.plot([icoeff,icoeff], [lb[icoeff],ub[icoeff]], '_', 
                          color='k', 
                          mew=2,
                          ms=10)
-                plt.plot(np.zeros(params.shape[1])+i, np.abs(params[i,:]), 'o', 
-                         color='C1',
-                         linewidth=0.5,
-                         ms=3)
-                for ii in ibest:
-                    plt.plot(i, np.abs(params[i,ii]), 'o', 
-                             color='C2',
+                for i in igood:
+                    plt.plot(icoeff, np.abs(params[icoeff,i]), 'o', 
+                             color='C1',
                              linewidth=0.5,
                              ms=3)
+            plt.title('{} | {:.2f} s | {}'.format(shot,timearray[tindex],desc))
             plt.yscale('log')
-            plt.xlabel('fit coefficients')
+            plt.xlabel('fit coefficient index')
+            plt.ylabel('{} fit coefficients'.format(field))
         plt.tight_layout()
+        if save_figures:
+            fname = Path('profiles_{}_{:.2f}s.pdf'.format(shot, timearray[tindex]))
+            plt.savefig(fname.as_posix(), format='pdf', transparent=True)
     if save_data:
         print('Saving profile data in {}'.format(prodatafile))
         with open(prodatafile, 'wb') as f:
