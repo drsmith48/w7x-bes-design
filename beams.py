@@ -317,7 +317,7 @@ class _Beam(object):
         vmec_bvec = vmec.service.magneticField(self.eq_tag, xyz_p3d)
         bvec = np.array([vmec_bvec.x1, vmec_bvec.x2, vmec_bvec.x3]).reshape(3,ngrid,ngrid)
         bnorm = np.linalg.norm(bvec, axis=0)
-        print(bnorm)
+        print(np.nanmin(bnorm), np.nanmax(bnorm))
         b_hat = bvec / np.tile(bnorm, (3,1,1))
         b_angle = np.arccos(np.sum(sl_hat*b_hat, axis=0)) * 180/np.pi
         b_angle[np.isnan(b_angle)] = 90
@@ -793,6 +793,7 @@ class Sightline(object):
                                                   Points3D(*xyz_sl.tolist()))
         bvec_xyz_sl = np.array([vmec_bvector.x1, vmec_bvector.x2, vmec_bvector.x3])
         bnorm_sl = np.linalg.norm(bvec_xyz_sl,axis=0)
+        print(bnorm_sl)
         bunit_sl = bvec_xyz_sl / np.tile(bnorm_sl.reshape(1,ngrid), (3,1))
         assert(np.allclose(np.linalg.norm(bunit_sl, axis=0), 1))
         # calc angle wrt B vector along sightline

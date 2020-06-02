@@ -40,48 +40,67 @@ import matplotlib.pyplot as plt
 from scipy.optimize import least_squares
 import PCIanalysis.gradientlengths as gl
 import hdf5
+# from calculations import Params
+
 
 
 np.random.seed()
 
 # shot/times for profiles
 profiles_list = [
-                 [180904027, 1.9, 'post-pellet'],
-                 # [180919007, 2.4, 'during NBI'],
-                ]
+    [180904027, 1.9, 'post-pellet'],
+    [180919007, 2.4, 'during NBI'],
+    ]
 profiles_default = [{'shot':p[0], 'time':p[1], 'desc':p[2]} for p in profiles_list]
+
+
+def feval(c, x, nohollow):
+    if nohollow:
+        yfit = c[0] * (c[1] + (1-c[1])*(1-np.abs(x)**c[2])**c[3])
+    else:
+        yfit = c[0] * (c[1] - c[4] + (1-c[1]+c[4])*(1-np.abs(x)**c[2])**c[3] + \
+                     c[4]*(1-np.exp(-(x**2)/(c[5]**2))))
+    return yfit
+
+
+def dfeval(c, x, nohollow):
+    if nohollow:
+        dyfit = -c[0] * ( -c[2]*c[3]*x**c[2]*(1 - np.abs(x)**c[2])**c[3] * 
+                         (1-c[1])/(x*(1+1e-6 - np.abs(x)**c[2])))
+    else:
+        dyfit = -c[0] * ( -c[2]*c[3]*x**c[2]*(1 - np.abs(x)**c[2])**c[3] * 
+                         (1-c[1]-c[4])/(x*(1+1e-6 - np.abs(x)**c[2])) + \
+                        2*c[4]*x*np.exp(-x**2/c[5]**2)/c[5]**2 )
+    return dyfit
+
+
+def residuals(c, x, yresample, nohollow):
+    # input: 1d array of n fit parameters
+    # output: 1d array of m residuals: y - yfit
+    yfit = feval(c, x/x.max(), nohollow=nohollow)
+    res = yfit - yresample
+    return res.reshape(res.size)
 
 
 def fit_profiles(profiles=profiles_default,
                  noplot=False,
                  save_data=False,
                  save_figures=False,
+                 save_fits=False,
                  fit_kwargs={},
                  plot_kwargs={}):
-    # sub-functions
-    def feval(c, x, nohollow):
-        if nohollow:
-            yfit = c[0] * (c[1] + (1-c[1])*(1-np.abs(x)**c[2])**c[3])
-        else:
-            yfit = c[0] * (c[1] - c[4] + (1-c[1]+c[4])*(1-np.abs(x)**c[2])**c[3] + \
-                         c[4]*(1-np.exp(-(x**2)/(c[5]**2))))
-        return yfit
-    def dfeval(c, x, nohollow):
-        if nohollow:
-            dyfit = -c[0] * ( -c[2]*c[3]*x**c[2]*(1 - np.abs(x)**c[2])**c[3] * (1-c[1])/(x*(1+1e-6 - np.abs(x)**c[2])))
-        else:
-            dyfit = -c[0] * ( -c[2]*c[3]*x**c[2]*(1 - np.abs(x)**c[2])**c[3] * (1-c[1]-c[4])/(x*(1+1e-6 - np.abs(x)**c[2])) + \
-                            2*c[4]*x*np.exp(-x**2/c[5]**2)/c[5]**2 )
-        return dyfit
-    def residuals(c, x, yresample, nohollow):
-        # input: 1d array of n fit parameters
-        # output: 1d array of m residuals: y - yfit
-        yfit = feval(c, x/x.max(), nohollow=nohollow)
-        res = yfit - yresample
-        return res.reshape(res.size)
-    tsdatafile = 'ts_data.pickle'
     prodatafile = 'profiles.pickle'
-    prodata2 = {}
+    # test profile data file
+    try:
+        with open(prodatafile, 'rb') as f:
+            prodata = pickle.load(f)
+        print('Data in {}'.format(prodatafile))
+        for key,value in prodata.items():
+            print('  ', key)
+            for key2 in value.keys():
+                print('    ', key2)
+    except:
+        prodata = {}
     fields = ['ne','te','ti']
     labels = ['ne [1e13/cm^3]',
               'Te [keV]',
@@ -90,30 +109,34 @@ def fit_profiles(profiles=profiles_default,
     nresample=5
     ts_edgecut = 2
     nfits = 60
+    fits = []
     for shottime in profiles:
         shot = shottime['shot']
         time = shottime['time']
         desc = shottime['desc']
-        prodata2[shot] = {}
+        if shot not in prodata:
+            prodata[shot] = {}
+        prodata[shot].pop('fits', None)
+        fit = shottime.copy()
         plt.figure(figsize=(10,8))
         for ifield,field,label in zip(range(len(fields)), fields, labels):
             print('Getting {} data for shot {:d}'.format(field, shot))
             if field in ['ne','te']:
                 try:
-                    with open(prodatafile, 'rb') as f:
-                        print('  Using data in {}'.format(prodatafile))
-                        prodata = pickle.load(f)
-                        tsdata = prodata[shot]['ts']
+                    # with open(prodatafile, 'rb') as f:
+                        # print('  Using data in {}'.format(prodatafile))
+                        # prodata_loaded = pickle.load(f)
+                    tsdata = prodata[shot]['ts']
                 except:
-                    try:
-                        with open(tsdatafile, 'rb') as f:
-                            print('  Using data in {}'.format(tsdatafile))
-                            tsprofiledata = pickle.load(f)
-                            tsdata = tsprofiledata[shot]
-                    except:
-                        print('  Fetching data from ArchiveDB')
-                        tsdata = gl.get_thomsondata(shot)
-                prodata2[shot]['ts'] = tsdata
+                    # try:
+                    #     with open(tsdatafile, 'rb') as f:
+                    #         print('  Using data in {}'.format(tsdatafile))
+                    #         tsprofiledata = pickle.load(f)
+                    #         tsdata = tsprofiledata[shot]
+                    # except:
+                    print('  Fetching data from ArchiveDB')
+                    tsdata = gl.get_thomsondata(shot)
+                    prodata[shot]['ts'] = tsdata
                 timearray = tsdata['time']/1e9
                 tindex = np.argmin(np.abs(timearray - time))
                 x = tsdata['roa'].copy()
@@ -139,21 +162,19 @@ def fit_profiles(profiles=profiles_default,
                 ub = np.array([ymax*2, 0.06, 4.0, 4.0,  0.25, 0.5])
             else:
                 try:
-                    with open(prodatafile, 'rb') as f:
-                        print('  Using data in {}'.format(prodatafile))
-                        prodata = pickle.load(f)
-                        xicsdata = prodata[shot]['xics']
+                    # with open(prodatafile, 'rb') as f:
+                    #     print('  Using data in {}'.format(prodatafile))
+                    #     prodata_loaded = pickle.load(f)
+                    #     prodata[shot] = prodata_loaded[shot]
+                    xicsdata = prodata[shot]['xics']
                 except:
                     try:
-                        raise Exception
+                        datafile = list(Path().glob('*{}*.hdf5'.format(shot)))[0]
+                        print('  Using data in {}'.format(datafile.as_posix()))
+                        xicsdata = hdf5.hdf5ToDict(datafile)
+                        prodata[shot]['xics'] = xicsdata
                     except:
-                        try:
-                            datafile = list(Path().glob('*{}*.hdf5'.format(shot)))[0]
-                            print('  Using data in {}'.format(datafile.as_posix()))
-                            xicsdata = hdf5.hdf5ToDict(datafile)
-                        except:
-                            continue
-                prodata2[shot]['xics'] = xicsdata
+                        continue
                 rho = np.array(xicsdata['dim']['rho'])  # norm. ; 1D
                 ti = np.array(xicsdata['value']['T_ion_Ar'])  # keV ; [time,rho]
                 tierr = np.array(xicsdata['sigma']['T_ion_Ar'])  # keV ; [time,rho]
@@ -246,16 +267,62 @@ def fit_profiles(profiles=profiles_default,
             plt.yscale('log')
             plt.xlabel('fit coefficient index')
             plt.ylabel('{} fit coefficients'.format(field))
+            ibest = np.argmax(wtsqerr)
+            fit[field] = {'params':params[:,ibest], 'xmax':x.max()}
         plt.tight_layout()
+        fits.append(fit)
         if save_figures:
             fname = Path('profiles_{}_{:.2f}s.pdf'.format(shot, timearray[tindex]))
             plt.savefig(fname.as_posix(), format='pdf', transparent=True)
+    if save_fits:
+        fitfile = 'fits.pickle'
+        print('Saving fits in {}'.format(fitfile))
+        with open(fitfile, 'wb') as f:
+            pickle.dump(fits, f)
     if save_data:
         print('Saving profile data in {}'.format(prodatafile))
         with open(prodatafile, 'wb') as f:
-            pickle.dump(prodata2, f)
+            pickle.dump(prodata, f)
+
+
+def profile_calculations():
+    # load data and print contents
+    prodatafile = 'fits.pickle'
+    with open(prodatafile, 'rb') as f:
+        fits = pickle.load(f)
+    print('Available data in {}'.format(prodatafile))
+    for fit in fits:
+        for key,value in fit.items():
+            print(key, value)
+    nohollow=False
+    # loop over input shots
+    for fullfit in fits:
+        # plot profiles and gradients
+        plt.figure(figsize=[10,8])
+        xmax = np.min([fullfit['ne']['xmax'],
+                       fullfit['te']['xmax'],
+                       fullfit['ti']['xmax']])
+        x = np.linspace(0.05, xmax, 100)
+        for ifield,field in enumerate(['ne','te','ti']):
+            plt.subplot(4,4,1+ifield*2)
+            fit = fullfit[field]
+            params = fit['params']
+            f = feval(params, x/xmax, nohollow=nohollow)
+            plt.plot(x, f)
+            plt.xlabel('r/a')
+            plt.ylabel(field)
+            plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
+            plt.subplot(4,4,2+ifield*2)
+            df = dfeval(params, x/x.max(), nohollow=nohollow)
+            plt.plot(x, df/f)
+            plt.xlabel('r/a')
+            plt.ylabel('d/drho ln({})'.format(field))
+            plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
+        plt.tight_layout()
+        break
 
 
 if __name__=='__main__':
     plt.close('all')
-    fit_profiles(save_data=False)
+    # fit_profiles(save_data=False, save_fits=False)
+    profile_calculations()
