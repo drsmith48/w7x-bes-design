@@ -331,7 +331,9 @@ def profile_calculations():
         k = np.array([param.k for param in params])
         lam = np.array([param.lam for param in params])
         Ti_J = np.array([param.Ti_J for param in params])
-        omega_star_e = (k / pc.e / 2.6) * Ti_J * dprofiles['ne'] / profiles['ne']
+        Te_J = np.array([param.Te_J for param in params])
+        omega_star_i = (k / pc.e / 2.6) * Ti_J * dprofiles['ne'] / profiles['ne']
+        omega_star_e = (k / pc.e / 2.6) * Te_J * dprofiles['ne'] / profiles['ne']
         plt.subplot(4,4,7)
         plt.plot(x, rhoi*1e3)
         plt.ylim([0,None])
@@ -345,6 +347,11 @@ def profile_calculations():
         plt.ylabel('2pi/k (cm) @ k*rho-i=0.3')
         plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
         plt.subplot(4,4,9)
+        plt.plot(x, omega_star_i/(2*np.pi)/1e3)
+        plt.xlabel('r/a')
+        plt.ylabel('omega_star_i (kHz)')
+        plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
+        plt.subplot(4,4,10)
         plt.plot(x, omega_star_e/(2*np.pi)/1e3)
         plt.xlabel('r/a')
         plt.ylabel('omega_star_e (kHz)')
