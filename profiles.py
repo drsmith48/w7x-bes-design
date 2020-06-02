@@ -38,9 +38,10 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import least_squares
+import scipy.constants as pc
 import PCIanalysis.gradientlengths as gl
 import hdf5
-# from calculations import Params
+from plasma_parameters import Params
 
 
 
@@ -302,22 +303,52 @@ def profile_calculations():
         xmax = np.min([fullfit['ne']['xmax'],
                        fullfit['te']['xmax'],
                        fullfit['ti']['xmax']])
-        x = np.linspace(0.05, xmax, 100)
+        x = np.linspace(0.05, xmax, 80)
+        profiles = {}
+        dprofiles = {}
         for ifield,field in enumerate(['ne','te','ti']):
             plt.subplot(4,4,1+ifield*2)
             fit = fullfit[field]
             params = fit['params']
-            f = feval(params, x/xmax, nohollow=nohollow)
-            plt.plot(x, f)
+            profiles[field] = feval(params, x/xmax, nohollow=nohollow)
+            plt.plot(x, profiles[field])
             plt.xlabel('r/a')
             plt.ylabel(field)
             plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
             plt.subplot(4,4,2+ifield*2)
-            df = dfeval(params, x/x.max(), nohollow=nohollow)
-            plt.plot(x, df/f)
+            dprofiles[field] = dfeval(params, x/x.max(), nohollow=nohollow)
+            plt.plot(x, dprofiles[field] / profiles[field])
             plt.xlabel('r/a')
             plt.ylabel('d/drho ln({})'.format(field))
             plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
+        params = []
+        for ix in np.arange(x.size):
+            params.append(Params(ne=profiles['ne'][ix]*1e13,
+                                 Te=profiles['te'][ix],
+                                 Ti=profiles['ti'][ix],
+                                 ))
+        rhoi = np.array([param.rho_i for param in params])
+        k = np.array([param.k for param in params])
+        lam = np.array([param.lam for param in params])
+        Ti_J = np.array([param.Ti_J for param in params])
+        omega_star_e = (k / pc.e / 2.6) * Ti_J * dprofiles['ne'] / profiles['ne']
+        plt.subplot(4,4,7)
+        plt.plot(x, rhoi*1e3)
+        plt.ylim([0,None])
+        plt.xlabel('r/a')
+        plt.ylabel('rho-i (mm)')
+        plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
+        plt.subplot(4,4,8)
+        plt.plot(x, lam*1e2)
+        plt.ylim([0,None])
+        plt.xlabel('r/a')
+        plt.ylabel('2pi/k (cm) @ k*rho-i=0.3')
+        plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
+        plt.subplot(4,4,9)
+        plt.plot(x, omega_star_e/(2*np.pi)/1e3)
+        plt.xlabel('r/a')
+        plt.ylabel('omega_star_e (kHz)')
+        plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
         plt.tight_layout()
         break
 

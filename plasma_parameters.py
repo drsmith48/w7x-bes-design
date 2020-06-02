@@ -26,11 +26,16 @@ class Params(object):
         self.mu = mu
         self.Z = Z
         
+        self.q = self.Z * pc.e
+        
         self.ni = ne / Z  # ion density by quasi-neutrality
         
         ev2j = pc.eV  # J/eV conversion factor
         gamma = 1.4  # adiabatic index
         rtol = 5e-3
+        
+        self.Te_J = self.Te * 1e3 * ev2j
+        self.Ti_J = self.Ti * 1e3 * ev2j
 
         m_i = mu * pc.m_p  # ion mass in kg
         
@@ -65,6 +70,10 @@ class Params(object):
                            4.57e-3*np.sqrt(mu*Ti)/Bmag, rtol=rtol))
         self.rho_s = self.c_s / self.Omega_i
         
+        # k @ k*rho-i=0.3
+        self.k = 0.3 / self.rho_i
+        self.lam = 2*np.pi/self.k
+                
     def __str__(self):
         output  = "ne = {:.3g} 1/cm**3".format(self.ne) + "\n"
         output += "Te = {:.3g} keV".format(self.Te) + "\n"
