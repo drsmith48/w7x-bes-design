@@ -8,7 +8,8 @@ Created on Wed May  8 11:38:30 2019
 
 import pathlib
 import numpy as np
-from scipy import integrate, interpolate, constants, optimize
+from scipy import integrate, constants, optimize
+from scipy.interpolate import CubicSpline
 import scipy.special as sp
 import matplotlib.pyplot as plt
 from matplotlib import cm
@@ -19,12 +20,6 @@ import cherab.openadas as oa
 import vmec_connection
 
 
-# vmec connection
-vmec = vmec_connection.connection()
-Points3D = vmec.type_factory('ns1').Points3D
-
-# atomic data
-adas = oa.OpenADAS(permit_extrapolation=True)
 
 # candidate viewing ports for injectors
 # input dimensions are mm
@@ -83,6 +78,15 @@ for ports in [k20_ports, k21_ports, rudix_ports]:
 del ports
 del value
 
+# vmec connection
+try:
+    vmec = vmec_connection.connection()
+    Points3D = vmec.type_factory('ns1').Points3D
+except:
+    vmec = None
+    Points3D = None
+
+
 
 class _Beam(object):
     
@@ -91,8 +95,11 @@ class _Beam(object):
                       'r_hat', 's_hat', 't_hat', 'name',
                       'src_width_1', 'src_width_2', 'divergence',
                       'torus_period']
-    _analysisdir = pathlib.Path().absolute().parent
+    _analysisdir = pathlib.Path().absolute()
     _ref_eq = 'w7x_ref_9'
+    # ADAS data
+    _adas = oa.OpenADAS(permit_extrapolation=True)
+
 
     def __init__(self, axis_spacing=0.04, species='protium', bvoltage=60e3,
                  eq_tag=None):
@@ -100,6 +107,8 @@ class _Beam(object):
         for attrname in self._required_attr:
             if getattr(self, attrname, None) is None:
                 raise AttributeError('"{}" is not implemented'.format(attrname))
+        if not vmec or not Points3D:
+            raise ValueError
         self.eq_tag = None
         self.axis = None
         self.axis_rpz = None
@@ -111,7 +120,7 @@ class _Beam(object):
         self.vbeam = np.sqrt(2 * constants.e * self.voltage / beam_species_mass)
         transition = (3,2)
         ionization_state = 0
-        self.wavelength = adas.wavelength(self.species, ionization_state, transition)
+        self.wavelength = self._adas.wavelength(self.species, ionization_state, transition)
         self.set_eq(eq_tag=eq_tag, axis_spacing=axis_spacing)
         vmec_bvec = vmec.service.magneticField(self.eq_tag, 
                                                Points3D(*self.axis.tolist()))
@@ -299,7 +308,7 @@ class _Beam(object):
             for it,t in enumerate(tgrid):
                 xyz_values[:,ir,it] = self.source + r*self.r_hat + t*self.t_hat
                 int_values[ir,it] = self.point_intensity(t=t,r=r)
-        intlevels = np.array([0.8,0.9]) * int_values.max()
+        intlevels = np.array([0.7,0.8,0.9]) * int_values.max()
         z_values = xyz_values[2,:,:]
         rmaj_values = np.sqrt(xyz_values[0,:,:]**2 + xyz_values[1,:,:]**2)
         rpz_values = self.xyz_to_rpz(xyz_values).reshape(3,-1)
@@ -317,16 +326,15 @@ class _Beam(object):
         vmec_bvec = vmec.service.magneticField(self.eq_tag, xyz_p3d)
         bvec = np.array([vmec_bvec.x1, vmec_bvec.x2, vmec_bvec.x3]).reshape(3,ngrid,ngrid)
         bnorm = np.linalg.norm(bvec, axis=0)
-        print(np.nanmin(bnorm), np.nanmax(bnorm))
         b_hat = bvec / np.tile(bnorm, (3,1,1))
         b_angle = np.arccos(np.sum(sl_hat*b_hat, axis=0)) * 180/np.pi
         b_angle[np.isnan(b_angle)] = 90
         b_angle = 90-np.abs(b_angle-90)
         if sp1 and sp2:
-            plt.subplot(sp1)
+            ax1 = plt.subplot(sp1)
         else:
             plt.figure(figsize=[10.2,3.25])
-            plt.subplot(1,2,1)
+            ax1 = plt.subplot(1,2,1)
         plt.contourf(rmaj_values, z_values, b_angle,
                      levels=np.linspace(0,15,6),
                      cmap=cm.viridis)
@@ -344,16 +352,16 @@ class _Beam(object):
         vpar = self.vbeam * np.sum(sl_hat*tiled_rhat, axis=0)
         dshift_values = self.wavelength * vpar / constants.c
         if sp1 and sp2:
-            plt.subplot(sp2)
+            ax2 = plt.subplot(sp2)
         else:
-            plt.subplot(1,2,2)
+            ax2 = plt.subplot(1,2,2)
         plt.contourf(rmaj_values, z_values, dshift_values,
                      levels=np.linspace(-5,5,11),
                      cmap=cm.RdYlBu_r)
         plt.clim(-4,4)
         plt.xlabel('R [m]')
         plt.ylabel('z [m]')
-        plt.title('{} | {} | {} doppler'.format(self.name, self.eq_tag, port))
+        plt.title('{} | {} | {} Doppler'.format(self.name, self.eq_tag, port))
         plt.gca().set_aspect('equal')
         plt.colorbar()
         plt.contour(rmaj_values, z_values, psi_values, colors='k')
@@ -361,102 +369,14 @@ class _Beam(object):
                     colors='k', levels=intlevels)
         plt.annotate('{} @ {:.1f} keV'.format(self.species.symbol, self.voltage/1e3),
                      [0.03,0.92], xycoords='axes fraction')
-        plt.tight_layout()
+        if not sp1 or not sp2:
+            plt.tight_layout()
         if save:
             fname = 'port_{}_viewing_pini_{:d}.pdf'.format(port, self.injector)
             fname = self._analysisdir / fname
             plt.savefig(fname.as_posix(), format='pdf', transparent=True)
-            
-    def plot_sightline(self, port=None, r_obs=None, z_obs=None, 
-                       eq_tag=None, save=False):
-        sl = Sightline(self, port, 
-                              r_obs=r_obs, 
-                              z_obs=z_obs, 
-                              eq_tag=eq_tag)
-        print(sl.bnorm)
-        ### plot quantities along sl
-        plt.figure(figsize=(12,8.25))
-        plotdata = [[sl.r, 'R-major (m)'],
-                    [sl.z, 'Z (m)'],
-                    [sl.bangle, 'Angle wrt B (deg)'],
-                    [sl.psinorm, 'Psi-norm'], 
-                    [sl.cosn, 'sl*nhat'],
-                    [sl.cosbi, 'sl*bihat'],
-                    ]
-        imax = np.argmax(sl.intensity)
-        for i,pdata in enumerate(plotdata):
-            plt.subplot(3,3,i+1)
-            xdata = sl.distance
-            ydata = pdata[0]
-            plt.xlim(xdata.min(), xdata.max())
-            plt.ylim(ydata.min()-np.abs(ydata.min())*0.1, 
-                      ydata.max()+np.abs(ydata.max())*0.1)
-            points = np.array([xdata, ydata]).T.reshape(-1, 1, 2)
-            segments = np.concatenate([points[:-1], points[1:]], axis=1)
-            lc = LineCollection(segments, norm=plt.Normalize(0,1),
-                                cmap='viridis_r')
-            lc.set_array(sl.intensity)
-            lc.set_linewidth(3)
-            line = plt.gca().add_collection(lc)
-            w_avg, w_sd = self.weighted_avg(ydata, sl.intensity)
-            plt.errorbar(xdata[imax], w_avg, yerr=w_sd, 
-                         color='r', capsize=3)
-            plt.colorbar(line, ax=plt.gca())
-            plt.xlabel('Dist. on {} sightline (m)'.format(port))
-            plt.ylabel(pdata[1])
-            plt.title('{} | {} | {}'.format(self.eq_tag, port, self.name))
-            if np.array_equal(ydata, sl.bangle):
-                plt.ylim(0,10)
-            plt.annotate('beam-wtd {}'.format(pdata[1]), (0.05,0.9), 
-                          xycoords='axes fraction')
-            plt.annotate('{:.3g} +/- {:.2g}'.format(w_avg, w_sd), (0.05,0.8), 
-                          xycoords='axes fraction')
-            if np.array_equal(ydata, sl.cosn) or np.array_equal(ydata, sl.cosbi):
-                w_int = np.sum(ydata*sl.step*sl.intensity)
-                plt.annotate('beam-wtd-sum: {:.3g} cm'.format(w_int*1e2), (0.05,0.7), 
-                          xycoords='axes fraction')
-            # if i<=1:
-            #     plt.annotate('k_max*rho_i = {:.3g}'.format(np.pi*2.5e-3/(2*w_sd)), 
-            #                   (0.05,0.7), 
-            #                   xycoords='axes fraction')
-        #### add measurement markers to beam profiles
-        self.plot_vertical_plane(port, sp1=338, sp2=339)
-        # r_avg, r_sd = self.weighted_avg(sl.r, sl.intensity)
-        # z_avg, z_sd = self.weighted_avg(sl.z, sl.intensity)
-        r_avg = np.average(sl.r, weights=sl.intensity)
-        z_avg = np.average(sl.z, weights=sl.intensity)
-        bi_disp = np.sum(sl.cosbi*sl.step*sl.intensity)/2
-        n_disp = np.sum(sl.cosn*sl.step*sl.intensity)/2
-        nhat = sl.nhat[:,imax]
-        bihat = sl.bihat[:,imax]
-        ax = plt.gcf().axes
-        for iax,col in zip([12,14],['r','b']):
-            # binormal displacement
-            nhat_r = np.linalg.norm(nhat[0:2])
-            nhat_z = nhat[2]
-            bihat_r = np.linalg.norm(bihat[0:2])
-            bihat_z = bihat[2]
-            rseq = [r_avg + bi_disp*bihat_r,
-                    r_avg + n_disp*nhat_r,
-                    r_avg - bi_disp*bihat_r,
-                    r_avg - n_disp*nhat_r,
-                    r_avg + bi_disp*bihat_r]
-            zseq = [z_avg + bi_disp*bihat_z,
-                    z_avg + n_disp*nhat_z,
-                    z_avg - bi_disp*bihat_z,
-                    z_avg - n_disp*nhat_z,
-                    z_avg + bi_disp*bihat_z]
-            ax[iax].plot(rseq, zseq, color=col)
-            # ax[iax].plot(r_avg, z_avg, color=col, marker='s', markersize=1)
-            # ax[iax].plot([r_avg-r_sd,r_avg+r_sd], [z_avg,z_avg],
-            #         color=col, marker='|', linewidth=2)
-            # ax[iax].plot([r_avg,r_avg], [z_avg-z_sd,z_avg+z_sd],
-            #         color=col, marker='_', linewidth=2)
-        plt.tight_layout()
-        if save:
-            fname = self._analysisdir / 'pini_{:d}_view_from_{}_R{:.0f}_Z{:.0f}.pdf'.format(
-                    self.injector, port, np.round(r_obs*1e2), np.round(z_obs*1e2))
-            plt.savefig(fname.as_posix(), transparent=True)
+        if sp1 and sp2:
+            return ax1, ax2
             
     def plot_sightlines_eqscan(self, port=None, r_obs=None, z_obs=None, 
                            betascan=False, save=False):
@@ -570,10 +490,10 @@ class _Beam(object):
             profile_s = np.empty(ssgrid.shape)
             for i,s in enumerate(ssgrid):
                 profile_s[i] = self.point_intensity(s=s, r=axial_dist)
-            f_interp = interpolate.interp1d(ssgrid, profile_s,
-                                            kind='cubic', 
-                                            fill_value='extrapolate',
-                                            assume_sorted=True)
+            f_interp = CubicSpline(ssgrid, profile_s)
+                                   # kind='cubic', 
+                                   # fill_value='extrapolate',
+                                   # assume_sorted=True)
             profile2d = f_interp(np.sqrt(svalues**2 + tvalues**2))
         # profile should sum to 1
         profile2d *= resolution**2
@@ -741,10 +661,29 @@ def test_heating_beams():
 
 class Sightline(object):
     
-    def __init__(self, beam, port, r_obs=None, z_obs=None, eq_tag=None):
-        if eq_tag is not None:
+    # vmec Fourier coefficients
+    pmodes = None
+    tmodes = None
+    rcoeff_interp = None
+    zcoeff_interp = None
+    
+    def __init__(self, 
+                 beam=None, 
+                 port='A21-lolo',
+                 r_obs=5.88, 
+                 z_obs=-0.4, 
+                 eq_tag=None):
+        if not beam:
+            beam = HeatingBeam(pini=2)
+        if eq_tag is not None and eq_tag!=beam.eq_tag:
             beam.set_eq(eq_tag=eq_tag)
-        eq_tag = beam.eq_tag
+            self.pmodes = self.tmodes = None
+            self.rcoeff_interp = self.zcoeff_interp = None
+        self.eq_tag = beam.eq_tag
+        if not vmec or not Points3D:
+            raise ValueError
+        self.port = port
+        self.beam = beam
         # calc dist from source to axis point at R=r_obs
         rxy = beam.r_hat[0:2]
         srcxy = beam.source[0:2]
@@ -753,6 +692,7 @@ class Sightline(object):
         quad_c = np.linalg.norm(srcxy)**2-r_obs**2
         dist = (-quad_b - np.sqrt(quad_b**2-4*quad_a*quad_c)) / (2*quad_a)
         if z_obs is None:
+            # if None, take z_obs to be on beam axis
             target = beam.source + dist*beam.r_hat
             z_obs = target[2]
         else:
@@ -763,110 +703,98 @@ class Sightline(object):
                      - r_obs**2
                 f2 = beam.source[2] + dr*beam.r_hat[2] + dt*beam.t_hat[2] - z_obs
                 return [f1, f2]
-            sol = optimize.root(fun, [dist,0], jac=False, options={})
-            if not sol.success:
-                print(sol.message)
-                raise RuntimeError(sol.message)
-            dr,dt = sol.x
+            solution = optimize.root(fun, [dist,0], jac=False, options={})
+            if not solution.success:
+                print(solution.message)
+                raise RuntimeError(solution.message)
+            dr,dt = solution.x
+            # beam target coordinates
             target = beam.source + dr*beam.r_hat + dt*beam.t_hat
-        # sightline from port to target
-        port_xyz = beam.ports[port]
+        self.r_obs = r_obs
+        self.z_obs = z_obs
+        # port coordinates
+        port_xyz = beam.ports[self.port]
+        # vector from port to beam target
         sightline = target - port_xyz
         obs_distance = np.linalg.norm(sightline)
-        unitvec_sl = sightline / obs_distance
-        step_sl= 0.02
-        dist_sl = np.arange(-0.5, 0.5, step_sl) + obs_distance
-        # x,y,z coords of sightline near beam axis
-        xyz_sl = port_xyz.reshape(3,1) + np.outer(unitvec_sl, dist_sl)
-        # check for inside LCFS
-        vmec_reff = vmec.service.getReff(eq_tag, 
+        # sightline unit vector
+        uvector_sl = sightline / obs_distance
+        # step interval along sightline
+        step_sl= 0.025
+        # distance array along sightline (near beam axis)
+        dist_sl = np.arange(-0.4, 0.4*(1+1e-4), step_sl) + obs_distance
+        # x,y,z coords along sightline (near beam axis)
+        xyz_sl = port_xyz.reshape(3,1) + np.outer(uvector_sl, dist_sl)
+        # r_eff along sightline
+        vmec_reff = vmec.service.getReff(self.eq_tag, 
                                          Points3D(*xyz_sl.tolist()))
-        reff = np.array(vmec_reff)
-        inplasma = np.isfinite(reff)
+        reff_sl = np.array(vmec_reff)
+        # test for inside LCFS
+        inplasma = np.isfinite(reff_sl)
         if np.count_nonzero(inplasma) == 0:
-            return
+            raise ValueError
         # remove sightline points outside LCFS
         xyz_sl = xyz_sl[:,inplasma]
         dist_sl = dist_sl[inplasma]
+        reff_sl = reff_sl[inplasma]
         ngrid = dist_sl.size
-        vmec_bvector = vmec.service.magneticField(eq_tag, 
+        self.imax = np.argmin(np.abs(dist_sl-obs_distance))
+        vmec_bvector = vmec.service.magneticField(self.eq_tag, 
                                                   Points3D(*xyz_sl.tolist()))
         bvec_xyz_sl = np.array([vmec_bvector.x1, vmec_bvector.x2, vmec_bvector.x3])
         bnorm_sl = np.linalg.norm(bvec_xyz_sl,axis=0)
-        print(bnorm_sl)
-        bunit_sl = bvec_xyz_sl / np.tile(bnorm_sl.reshape(1,ngrid), (3,1))
-        assert(np.allclose(np.linalg.norm(bunit_sl, axis=0), 1))
-        # calc angle wrt B vector along sightline
-        dots = np.sum(np.tile(unitvec_sl.reshape(3,1), (1,ngrid)) * bunit_sl, axis=0)
-        bangle_sl = np.arccos(dots)
-        bangle_sl[np.isnan(bangle_sl)] = np.pi/2
-        bangle_sl = np.pi/2-np.abs(bangle_sl-np.pi/2)
+        buvec_sl = bvec_xyz_sl / np.tile(bnorm_sl.reshape(1,ngrid), (3,1))
+        assert(np.allclose(np.linalg.norm(buvec_sl, axis=0), 1))
         # psi
         rpz_sl = beam.xyz_to_rpz(xyz_sl)
         r_sl = rpz_sl[0,:]
         z_sl = xyz_sl[2,:]
-        vmec_stp = vmec.service.toVMECCoordinates(eq_tag, 
+        vmec_stp = vmec.service.toVMECCoordinates(self.eq_tag, 
                                                   Points3D(*rpz_sl.tolist()),
                                                   1e-4)
-        s_sl = np.array(vmec_stp.x1) # norm. flux surface
+        psi_sl = np.array(vmec_stp.x1) # norm. flux surface
         theta_sl = np.array(vmec_stp.x2) # poloidal angle [rad]
+        theta_sl[theta_sl>np.pi] = theta_sl[theta_sl>np.pi] - 2*np.pi
         phi_sl = np.array(vmec_stp.x3) # toroidal angle [rad]
+        # calc angle wrt B vector along sightline
+        dots = np.sum(np.tile(uvector_sl.reshape(3,1), 
+                              (1,ngrid)) * buvec_sl, axis=0)
+        bangle_sl = np.arccos(dots)
+        bangle_sl[np.isnan(bangle_sl)] = np.pi/2
+        bangle_sl = np.pi/2-np.abs(bangle_sl-np.pi/2)
+        # print('  R={:.3f} Z={:.3f} psi={:.3f} |B|={:.3f} l_plasma={:.3f}'.format(
+        #     r_obs, z_obs, psi_sl[self.imax], bnorm_sl[self.imax], dist_sl[-1]-dist_sl[0]))
         # calc beam intensity along sightline
         beam_intensity_sl = np.empty(ngrid)
         for i in np.arange(ngrid):
             beam_intensity_sl[i] = beam.point_intensity(x=xyz_sl[0,i],
-                                                   y=xyz_sl[1,i],
-                                                   z=xyz_sl[2,i])
+                                                        y=xyz_sl[1,i],
+                                                        z=xyz_sl[2,i])
         # normalize intensity along sightline
         beam_intensity_sl = beam_intensity_sl / beam_intensity_sl.max()
-        # # set quantities along sightline
-        # r_weighted_avg = np.average(r_sl, weights=beam_intensity_sl)
-        # z_weighted_avg = np.average(z_sl, weights=beam_intensity_sl)
         # fourier components
-        vmec_rcoscoeff = vmec.service.getFourierCoefficients(eq_tag, 'RCos')
-        vmec_zsincoeff = vmec.service.getFourierCoefficients(eq_tag, 'ZSin')
-        nrad = vmec_rcoscoeff.numRadialPoints
-        rarray = np.linspace(0,1,nrad) # uniform psinorm grid
-        pmodes = np.array(vmec_rcoscoeff.poloidalModeNumbers, dtype=np.int).reshape([-1,1])
-        npol = pmodes.size
-        tmodes = np.array(vmec_rcoscoeff.toroidalModeNumbers, dtype=np.int).reshape([1,-1])
-        ntor = tmodes.size
-        rcoeff = np.empty([nrad,npol,ntor])
-        zcoeff = np.empty([nrad,npol,ntor])
-        for k in np.arange(nrad):
-            for m in np.arange(npol):
-                for n in np.arange(ntor):
-                    icoeff = (m * ntor + n) * nrad + k
-                    rcoeff[k,m,n] = vmec_rcoscoeff.coefficients[icoeff]
-                    zcoeff[k,m,n] = vmec_zsincoeff.coefficients[icoeff]
-        imin = np.argmin(np.abs(rarray-s_sl.min()))-3
-        imax = np.argmin(np.abs(rarray-s_sl.max()))+3
-        rcoeff_interp = interpolate.interp1d(rarray[imin:imax], 
-                                             rcoeff[imin:imax,...], 
-                                             axis=0,
-                                             kind='cubic',
-                                             assume_sorted=True)
-        zcoeff_interp = interpolate.interp1d(rarray[imin:imax], 
-                                             zcoeff[imin:imax,...], 
-                                             axis=0,
-                                             kind='cubic',
-                                             assume_sorted=True)
+        if self.rcoeff_interp is None:
+            self.vmec_coeff()
         u_sl = theta_sl
         dphidv = 1/5
         v_sl = phi_sl / dphidv
-        def eval_vmec(s,u,v, rin, zin):
-            rcoeff_local = rcoeff_interp(s)
-            zcoeff_local = zcoeff_interp(s)
+        def calc_nhat(s,u,v, rin, zin):
+            rcoeff_local = self.rcoeff_interp(s)
+            zcoeff_local = self.zcoeff_interp(s)
             phi = v * dphidv
-            parray = np.broadcast_to(pmodes, rcoeff_local.shape)
-            tarray = np.broadcast_to(tmodes, rcoeff_local.shape)
+            parray = np.broadcast_to(self.pmodes, rcoeff_local.shape)
+            tarray = np.broadcast_to(self.tmodes, rcoeff_local.shape)
             operand = parray*u - tarray*v
             cosmn = np.cos(operand)
             sinmn = np.sin(operand)
             r = np.sum(rcoeff_local * cosmn)
             z = np.sum(zcoeff_local * sinmn)
-            assert(np.allclose(r, rin))
-            assert(np.allclose(z, zin, rtol=5e-5))
+            if not np.allclose(r, rin, rtol=5e-4):
+                print(r, rin, s)
+                assert(False)
+            if not np.allclose(z, zin, rtol=5e-4):
+                print(z, zin, s)
+                assert(False)
             dcosdu = -parray * sinmn
             dcosdv = tarray * sinmn
             dsindu = parray * cosmn
@@ -874,11 +802,11 @@ class Sightline(object):
             eu = np.array([np.sum(rcoeff_local * dcosdu) * np.cos(phi),
                            np.sum(rcoeff_local * dcosdu) * np.sin(phi),
                            np.sum(zcoeff_local * dsindu)])
+            eu = eu / np.linalg.norm(eu)
             evx = np.sum(rcoeff_local*dcosdv)*np.cos(phi) - r*dphidv*np.sin(phi)
             evy = np.sum(rcoeff_local*dcosdv)*np.sin(phi) + r*dphidv*np.cos(phi)
             evz = np.sum(zcoeff_local*dsindv)
             ev = np.array([evx, evy, evz])
-            eu = eu / np.linalg.norm(eu)
             ev = ev / np.linalg.norm(ev)
             nvec = -np.cross(eu,ev)
             nvec = nvec / np.linalg.norm(nvec)
@@ -893,35 +821,132 @@ class Sightline(object):
             nvec2 = nvec2 / np.linalg.norm(nvec2)
             assert(np.allclose(nvec,nvec2))
             return nvec
-        nhat = np.empty(bunit_sl.shape)
-        bihat = np.empty(bunit_sl.shape)
-        cosn = np.empty(ngrid)
-        cosbi = np.empty(ngrid)
+        self.nhat = np.empty(buvec_sl.shape)
+        self.bihat = np.empty(buvec_sl.shape)
+        self.cosn = np.empty(ngrid)
+        self.cosbi = np.empty(ngrid)
         for igrid in np.arange(ngrid):
-            nhat[:,igrid] = eval_vmec(s_sl[igrid], u_sl[igrid], v_sl[igrid], 
+            self.nhat[:,igrid] = calc_nhat(psi_sl[igrid], u_sl[igrid], v_sl[igrid], 
                                       r_sl[igrid], z_sl[igrid])
-            assert(np.allclose(np.sum(nhat[:,igrid]*bunit_sl[:,igrid])+1, 1))
-            bihat[:,igrid] = np.cross(nhat[:,igrid], bunit_sl[:,igrid])
-            assert(np.allclose(np.linalg.norm(bihat[:,igrid]), 1))
-            bihat[:,igrid]  = bihat[:,igrid] / np.linalg.norm(bihat[:,igrid])
-            cosn[igrid] = np.sum(unitvec_sl*nhat[:,igrid])
-            cosbi[igrid] = np.sum(unitvec_sl*bihat[:,igrid])
-        self.slhat = unitvec_sl
+            assert(np.allclose(np.sum(self.nhat[:,igrid]*buvec_sl[:,igrid])+1, 1,
+                               rtol=5e-4))
+            self.bihat[:,igrid] = np.cross(self.nhat[:,igrid], buvec_sl[:,igrid])
+            assert(np.allclose(np.linalg.norm(self.bihat[:,igrid]), 1))
+            self.bihat[:,igrid]  = self.bihat[:,igrid] / np.linalg.norm(self.bihat[:,igrid])
+            self.cosn[igrid] = np.sum(uvector_sl*self.nhat[:,igrid])
+            self.cosbi[igrid] = np.sum(uvector_sl*self.bihat[:,igrid])
+        self.slhat = uvector_sl
         self.distance = dist_sl
         self.step = step_sl
         self.xyz = xyz_sl
+        self.reff = reff_sl
         self.r = r_sl
         self.z = z_sl
-        self.psinorm = s_sl
-        self.bangle = bangle_sl *180 / np.pi
+        self.r_obs = r_obs
+        self.z_obs = z_obs
+        self.r_avg = np.average(r_sl, weights=beam_intensity_sl)
+        self.z_avg = np.average(z_sl, weights=beam_intensity_sl)
+        self.psinorm = psi_sl
+        self.theta = theta_sl
+        self.bangle = bangle_sl * 180 / np.pi
         self.intensity = beam_intensity_sl
-        self.bhat = bunit_sl
-        self.nhat = nhat
-        self.bihat = bihat
+        self.bhat = buvec_sl
         self.bnorm = bnorm_sl
-        self.cosn = cosn
-        self.cosbi = cosbi
+        self.norm_half_excursion = np.abs(np.sum(self.cosn*self.step*self.intensity))/2
+        self.binorm_half_excursion = np.abs(np.sum(self.cosbi*self.step*self.intensity))/2
+        nhat = self.nhat[:,self.imax]
+        bihat = self.bihat[:,self.imax]
+        nhat_r = np.linalg.norm(nhat[0:2])
+        nhat_z = nhat[2]
+        bihat_r = np.linalg.norm(bihat[0:2])
+        bihat_z = bihat[2]
+        self.rseq = [self.r_avg + self.binorm_half_excursion*bihat_r,
+                     self.r_avg + self.norm_half_excursion*nhat_r,
+                     self.r_avg - self.binorm_half_excursion*bihat_r,
+                     self.r_avg - self.norm_half_excursion*nhat_r,
+                     # self.r_avg + self.binorm_half_excursion*bihat_r,
+                     ]
+        self.zseq = [self.z_avg + self.binorm_half_excursion*bihat_z,
+                     self.z_avg + self.norm_half_excursion*nhat_z,
+                     self.z_avg - self.binorm_half_excursion*bihat_z,
+                     self.z_avg - self.norm_half_excursion*nhat_z,
+                     # self.z_avg + self.binorm_half_excursion*bihat_z,
+                     ]
+        
+    def vmec_coeff(self):
+        vmec_rcoscoeff = vmec.service.getFourierCoefficients(self.eq_tag, 'RCos')
+        vmec_zsincoeff = vmec.service.getFourierCoefficients(self.eq_tag, 'ZSin')
+        nrad = vmec_rcoscoeff.numRadialPoints
+        rarray = np.linspace(0,1,nrad) # uniform psinorm grid
+        self.pmodes = np.array(vmec_rcoscoeff.poloidalModeNumbers, dtype=np.int).reshape([-1,1])
+        npol = self.pmodes.size
+        self.tmodes = np.array(vmec_rcoscoeff.toroidalModeNumbers, dtype=np.int).reshape([1,-1])
+        ntor = self.tmodes.size
+        rcoeff = np.empty([nrad,npol,ntor])
+        zcoeff = np.empty([nrad,npol,ntor])
+        for k in np.arange(nrad):
+            for m in np.arange(npol):
+                for n in np.arange(ntor):
+                    icoeff = (m * ntor + n) * nrad + k
+                    rcoeff[k,m,n] = vmec_rcoscoeff.coefficients[icoeff]
+                    zcoeff[k,m,n] = vmec_zsincoeff.coefficients[icoeff]
+        self.rcoeff_interp = CubicSpline(rarray, rcoeff, axis=0, extrapolate=False)
+        self.zcoeff_interp = CubicSpline(rarray, zcoeff, axis=0, extrapolate=False)
+        
+    def plot_sightline(self, save=False):
+        # plot quantities along sl
+        plt.figure(figsize=(12,8.25))
+        plotdata = [[self.r, 'R-major (m)'],
+                    [self.z, 'Z (m)'],
+                    [self.bangle, 'Angle wrt B (deg)'],
+                    [self.psinorm, 'Psi-norm'], 
+                    [self.cosn, 'sl*nhat'],
+                    [self.cosbi, 'sl*bihat'],
+                    ]
+        for i,pdata in enumerate(plotdata):
+            plt.subplot(3,3,i+1)
+            xdata = self.distance
+            ydata = pdata[0]
+            plt.xlim(xdata.min(), xdata.max())
+            plt.ylim(ydata.min()-np.abs(ydata.min())*0.1, 
+                      ydata.max()+np.abs(ydata.max())*0.1)
+            points = np.array([xdata, ydata]).T.reshape(-1, 1, 2)
+            segments = np.concatenate([points[:-1], points[1:]], axis=1)
+            lc = LineCollection(segments, norm=plt.Normalize(0,1),
+                                cmap='viridis_r')
+            lc.set_array(self.intensity)
+            lc.set_linewidth(3)
+            line = plt.gca().add_collection(lc)
+            w_avg, w_sd = self.beam.weighted_avg(ydata, self.intensity)
+            plt.errorbar(xdata[self.imax], w_avg, yerr=w_sd, 
+                         color='r', capsize=3)
+            plt.colorbar(line, ax=plt.gca())
+            plt.xlabel('Dist. on {} sightline (m)'.format(self.port))
+            plt.ylabel(pdata[1])
+            plt.title('{} | {} | {}'.format(self.eq_tag, self.port, self.beam.name))
+            if np.array_equal(ydata, self.bangle):
+                plt.ylim(0,10)
+            plt.annotate('beam-wtd {}'.format(pdata[1]), (0.05,0.9), 
+                          xycoords='axes fraction')
+            plt.annotate('{:.3g} +/- {:.2g}'.format(w_avg, w_sd), (0.05,0.8), 
+                          xycoords='axes fraction')
+            if np.array_equal(ydata, self.cosn) or np.array_equal(ydata, self.cosbi):
+                w_int = np.abs(np.sum(ydata * self.step * self.intensity))/2
+                plt.annotate('beam-wtd-sum/2: {:.3g} cm'.format(w_int*1e2), (0.05,0.7), 
+                          xycoords='axes fraction')
+        # add measurement markers to beam profiles
+        ax1, ax2 = self.beam.plot_vertical_plane(self.port, sp1=337, sp2=338)
+        plt.sca(ax1)
+        plt.plot(self.rseq, self.zseq, color='r')
+        plt.sca(ax2)
+        plt.plot(self.rseq, self.zseq, color='b')
+        plt.tight_layout()
+        if save:
+            fname = self.beam._analysisdir / 'pini_{:d}_view_from_{}_R{:.0f}_Z{:.0f}.pdf'.format(
+                    self.beam.injector, 
+                    self.port, 
+                    np.round(self.r_obs*1e2), 
+                    np.round(self.z_obs*1e2))
+            plt.savefig(fname.as_posix(), transparent=True)
 
 
-if __name__=='__main__':
-    test_heating_beams()

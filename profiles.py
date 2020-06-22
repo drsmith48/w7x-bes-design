@@ -39,10 +39,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import least_squares
 import scipy.constants as pc
-import PCIanalysis.gradientlengths as gl
 import hdf5
 from plasma_parameters import Params
-
 
 
 np.random.seed()
@@ -50,7 +48,7 @@ np.random.seed()
 # shot/times for profiles
 profiles_list = [
     [180904027, 1.9, 'post-pellet'],
-    [180919007, 2.4, 'during NBI'],
+    # [180919007, 2.4, 'during NBI'],
     ]
 profiles_default = [{'shot':p[0], 'time':p[1], 'desc':p[2]} for p in profiles_list]
 
@@ -84,6 +82,7 @@ def residuals(c, x, yresample, nohollow):
 
 
 def fit_profiles(profiles=profiles_default,
+                 nohollow=False,
                  noplot=False,
                  save_data=False,
                  save_figures=False,
@@ -101,15 +100,15 @@ def fit_profiles(profiles=profiles_default,
             for key2 in value.keys():
                 print('    ', key2)
     except:
+        import PCIanalysis.gradientlengths as gl
         prodata = {}
     fields = ['ne','te','ti']
-    labels = ['ne [1e13/cm^3]',
-              'Te [keV]',
-              'Ti [keV]']
-    nohollow = False
+    labels = ['ne (1e13/cm^3)',
+              'Te (keV)',
+              'Ti (keV)']
     nresample=5
     ts_edgecut = 2
-    nfits = 60
+    nfits = 50
     fits = []
     for shottime in profiles:
         shot = shottime['shot']
@@ -124,17 +123,8 @@ def fit_profiles(profiles=profiles_default,
             print('Getting {} data for shot {:d}'.format(field, shot))
             if field in ['ne','te']:
                 try:
-                    # with open(prodatafile, 'rb') as f:
-                        # print('  Using data in {}'.format(prodatafile))
-                        # prodata_loaded = pickle.load(f)
                     tsdata = prodata[shot]['ts']
                 except:
-                    # try:
-                    #     with open(tsdatafile, 'rb') as f:
-                    #         print('  Using data in {}'.format(tsdatafile))
-                    #         tsprofiledata = pickle.load(f)
-                    #         tsdata = tsprofiledata[shot]
-                    # except:
                     print('  Fetching data from ArchiveDB')
                     tsdata = gl.get_thomsondata(shot)
                     prodata[shot]['ts'] = tsdata
@@ -159,14 +149,10 @@ def fit_profiles(profiles=profiles_default,
                     y = np.append(y, edgelim)
                     yerr = np.append(yerr, edgelim)
                 ymax = np.max(y[x<=0.5])
-                lb = np.array([ymax/2, 1e-3, 0.3, 0.3, -0.25, 0.2])
-                ub = np.array([ymax*2, 0.06, 4.0, 4.0,  0.25, 0.5])
+                lb = np.array([ymax/2, 1e-3, 0.3, 0.3, 1e-3, 0.2])
+                ub = np.array([ymax*2, 5e-2, 4.0, 4.0,  0.15, 0.5])
             else:
                 try:
-                    # with open(prodatafile, 'rb') as f:
-                    #     print('  Using data in {}'.format(prodatafile))
-                    #     prodata_loaded = pickle.load(f)
-                    #     prodata[shot] = prodata_loaded[shot]
                     xicsdata = prodata[shot]['xics']
                 except:
                     try:
@@ -193,8 +179,8 @@ def fit_profiles(profiles=profiles_default,
                     y = np.append(y, edgelim)
                     yerr = np.append(yerr, edgelim)
                 ymax = np.max(y[x<=0.5])
-                lb = np.array([ymax/2, 1e-3, 0.3, 0.3, -0.15, 0.2])
-                ub = np.array([ymax*2,  0.4, 6.0, 4.0,  0.15, 0.6])
+                lb = np.array([ymax/2, 1e-3, 0.3, 0.3, 1e-3, 0.2])
+                ub = np.array([ymax*2, 5e-2, 6.0, 4.0,  0.15, 0.6])
             x = x.reshape(-1,1)
             y = y.reshape(-1,1)
             yerr = yerr.reshape(-1,1)
@@ -202,7 +188,7 @@ def fit_profiles(profiles=profiles_default,
             axpro = plt.subplot(3,3,ifield*3+1)
             axgrad = plt.subplot(3,3,ifield*3+2)
             plt.sca(axpro)
-            plt.errorbar(x, y, yerr=yerr, fmt='x')
+            plt.errorbar(x, y, yerr=np.squeeze(yerr), fmt='x')
             plt.xlabel('r/a')
             plt.ylabel(label)
             plt.ylim(0,None)
@@ -215,7 +201,7 @@ def fit_profiles(profiles=profiles_default,
             plt.xlim(0,1.2)
             plt.ylim(-5,15)
             # least squares fit
-            c0 = np.array([  ymax, 0.01, 1.1, 1.5,  0,   0.25])
+            c0 = np.array([  ymax, 0.01, 1.1, 1.5,  1e-2,   0.25])
             x_scale = np.array([1,1e-2,0.1,0.1,5e-2,1e-2])
             if nohollow:
                 c0 = c0[0:4]
@@ -254,8 +240,8 @@ def fit_profiles(profiles=profiles_default,
                 plt.sca(axgrad)
                 plt.plot(xvals, dyfit/yfit, color='C1', linewidth=0.5)
             plt.subplot(3,3,ifield*3+3)
-            for icoeff in [0,1,2,3,4,5]:
-                plt.plot([icoeff,icoeff], [lb[icoeff],ub[icoeff]], '_', 
+            for icoeff in np.arange(c0.size):
+                plt.plot([icoeff,icoeff], np.abs([lb[icoeff],ub[icoeff]]), '_', 
                          color='k', 
                          mew=2,
                          ms=10)
@@ -268,8 +254,21 @@ def fit_profiles(profiles=profiles_default,
             plt.yscale('log')
             plt.xlabel('fit coefficient index')
             plt.ylabel('{} fit coefficients'.format(field))
-            ibest = np.argmax(wtsqerr)
-            fit[field] = {'params':params[:,ibest], 'xmax':x.max()}
+            isort = np.argsort(wtsqerr)[0:nfits//10]
+            bestfits = params[:,isort]
+            bestparams = np.empty(bestfits.shape[0])
+            lesszero = np.count_nonzero(bestfits<0, axis=1)
+            for iparam,zerocount in enumerate(lesszero):
+                if zerocount==0:
+                    bestparams[iparam] = np.exp(np.median(np.log(bestfits[iparam,:])))
+                elif zerocount==nfits//10:
+                    bestparams[iparam] = -np.exp(np.median(np.log(-bestfits[iparam,:])))
+                else:
+                    raise ValueError
+            fit[field] = {'params':bestparams, 
+                          'xmax':x.max(),
+                          'label':labels[ifield],
+                          'nohollow':nohollow}
         plt.tight_layout()
         fits.append(fit)
         if save_figures:
@@ -286,41 +285,46 @@ def fit_profiles(profiles=profiles_default,
             pickle.dump(prodata, f)
 
 
-def profile_calculations():
+def profile_calculations(ifit=0,
+                         all_fits=False,
+                         save=False):
     # load data and print contents
     prodatafile = 'fits.pickle'
     with open(prodatafile, 'rb') as f:
         fits = pickle.load(f)
-    print('Available data in {}'.format(prodatafile))
-    for fit in fits:
+    print('Available fits in {}'.format(prodatafile))
+    for i,fit in enumerate(fits):
+        print('Fit {} of {}'.format(i, len(fits)))
         for key,value in fit.items():
-            print(key, value)
-    nohollow=False
+            if key in ['shot','time','desc']:
+                print('  {} {}'.format(key, value))
+    if not all_fits:
+        fits = [fits[ifit]]
+    x = np.linspace(0.01, 1.0, 80)
     # loop over input shots
     for fullfit in fits:
         # plot profiles and gradients
-        plt.figure(figsize=[10,8])
-        xmax = np.min([fullfit['ne']['xmax'],
-                       fullfit['te']['xmax'],
-                       fullfit['ti']['xmax']])
-        x = np.linspace(0.05, xmax, 80)
+        plt.figure(figsize=[8.5,4.4])
         profiles = {}
         dprofiles = {}
         for ifield,field in enumerate(['ne','te','ti']):
-            plt.subplot(4,4,1+ifield*2)
             fit = fullfit[field]
-            params = fit['params']
-            profiles[field] = feval(params, x/xmax, nohollow=nohollow)
-            plt.plot(x, profiles[field])
-            plt.xlabel('r/a')
-            plt.ylabel(field)
-            plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
-            plt.subplot(4,4,2+ifield*2)
-            dprofiles[field] = dfeval(params, x/x.max(), nohollow=nohollow)
-            plt.plot(x, dprofiles[field] / profiles[field])
-            plt.xlabel('r/a')
-            plt.ylabel('d/drho ln({})'.format(field))
-            plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
+            profiles[field] = feval(fit['params'], 
+                                    x/fit['xmax'], 
+                                    nohollow=fit['nohollow'])
+            dprofiles[field] = dfeval(fit['params'], 
+                                      x/fit['xmax'], 
+                                      nohollow=fit['nohollow'])
+            # plt.subplot(2,3,1+ifield*2)
+            # plt.plot(x, profiles[field])
+            # plt.xlabel('r/a')
+            # plt.ylabel(fit['label'])
+            # plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
+            # plt.subplot(2,3,2+ifield*2)
+            # plt.plot(x, dprofiles[field] / profiles[field])
+            # plt.xlabel('r/a')
+            # plt.ylabel('d/drho ln({})'.format(field))
+            # plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
         params = []
         for ix in np.arange(x.size):
             params.append(Params(ne=profiles['ne'][ix]*1e13,
@@ -328,39 +332,66 @@ def profile_calculations():
                                  Ti=profiles['ti'][ix],
                                  ))
         rhoi = np.array([param.rho_i for param in params])
-        k = np.array([param.k for param in params])
-        lam = np.array([param.lam for param in params])
+        rhos = np.array([param.rho_s for param in params])
+        plt.subplot(2,3,1)
+        plt.plot(x, rhoi*1e3, label='rho-i')
+        plt.plot(x, rhos*1e3, label='rho-s')
+        plt.legend()
+        plt.ylim([0,None])
+        plt.xlabel('r/a')
+        plt.ylabel('rho-i,s (mm)')
+        plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
+        # k values for k*rhoi= X
+        k = np.matmul(1/rhoi.reshape(-1,1),
+                      np.array([0.1,0.3,0.8]).reshape(1,-1))
+        plt.subplot(2,3,2)
+        plt.plot(x, k/1e2)
+        plt.legend(['k*rhoi = 0.1',
+                    'k*rhoi = 0.3',
+                    'k*rhoi = 0.8'])
+        plt.xlabel('r/a')
+        plt.ylabel('k (1/cm)')
+        plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
+        # 2pi/k
+        plt.subplot(2,3,3)
+        plt.plot(x, 2*np.pi/(k/1e2))
+        plt.legend(['k*rhoi = 0.1',
+                    'k*rhoi = 0.3',
+                    'k*rhoi = 0.8'])
+        plt.xlabel('r/a')
+        plt.ylabel('2pi/k (cm)')
+        plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
+        # omega-star
         Ti_J = np.array([param.Ti_J for param in params])
         Te_J = np.array([param.Te_J for param in params])
-        omega_star_i = (k / pc.e / 2.6) * Ti_J * dprofiles['ne'] / profiles['ne']
-        omega_star_e = (k / pc.e / 2.6) * Te_J * dprofiles['ne'] / profiles['ne']
-        plt.subplot(4,4,7)
-        plt.plot(x, rhoi*1e3)
-        plt.ylim([0,None])
-        plt.xlabel('r/a')
-        plt.ylabel('rho-i (mm)')
-        plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
-        plt.subplot(4,4,8)
-        plt.plot(x, lam*1e2)
-        plt.ylim([0,None])
-        plt.xlabel('r/a')
-        plt.ylabel('2pi/k (cm) @ k*rho-i=0.3')
-        plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
-        plt.subplot(4,4,9)
+        gradpi_over_n = np.array(Ti_J * dprofiles['ne'] / profiles['ne']).reshape(-1,1)
+        gradpe_over_n = np.array(Te_J * dprofiles['ne'] / profiles['ne']).reshape(-1,1)
+        omega_star_i = (k / pc.e / 2.6) * gradpi_over_n
+        omega_star_e = (k / pc.e / 2.6) * gradpe_over_n
+        plt.subplot(2,3,4)
         plt.plot(x, omega_star_i/(2*np.pi)/1e3)
+        plt.legend(['k*rhoi = 0.1',
+                    'k*rhoi = 0.3',
+                    'k*rhoi = 0.8'])
         plt.xlabel('r/a')
         plt.ylabel('omega_star_i (kHz)')
         plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
-        plt.subplot(4,4,10)
+        plt.subplot(2,3,5)
         plt.plot(x, omega_star_e/(2*np.pi)/1e3)
+        plt.legend(['k*rhoi = 0.1',
+                    'k*rhoi = 0.3',
+                    'k*rhoi = 0.8'])
         plt.xlabel('r/a')
         plt.ylabel('omega_star_e (kHz)')
         plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
         plt.tight_layout()
-        break
+        if save:
+            fname = Path('profile_quantities_{}_{:.2g}s.pdf'.format(
+                fullfit['shot'], fullfit['time']))
+            plt.savefig(fname.as_posix(), format='pdf', transparent=True)
 
 
 if __name__=='__main__':
     plt.close('all')
-    # fit_profiles(save_data=False, save_fits=False)
+    # fit_profiles(nohollow=True, save_data=False, save_fits=False)
     profile_calculations()

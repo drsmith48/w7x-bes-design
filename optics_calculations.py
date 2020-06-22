@@ -18,9 +18,15 @@ class FiberImage(object):
                  fiber_na=0.333,  # fiber numerical aperture
                  lens_diameter=6.0,  # lens diameter in cm
                  fiber_distance = 3.0,  # image distance in cm
-                 spot_distance = 200.0,  # object distance in cm
+                 spot_distance = 180.0,  # object distance in cm
                  ):
         assert(fiber_na>0 and fiber_diameter>0 and lens_diameter>0 and fiber_distance>0)
+        
+        self.fiber_na = fiber_na
+        self.fiber_diameter = fiber_diameter
+        
+        # throughput in mm**2-ster
+        self.etendue = (np.pi * fiber_diameter * fiber_na)**2 / 4
 
         t = spot_distance
         a = lens_diameter/2  # entrance pupil radius
@@ -87,18 +93,21 @@ class FiberImage(object):
         
         
 def plot(save=False):
-    plt.close('all')
-    fiber_diameters = np.array([0.05,0.1,0.2,0.3,0.4,0.6,0.8,1.0])
+    fiber_diameters = np.array([0.05,0.1,0.2,0.3,0.4,0.6,0.8,1.0,
+                                1.2,1.6,1.8,2.0])
 
-    na_values = [0.5, 0.333, 0.2]
-    lens_values = [4,6,8]
+    na_values = [0.333, 0.2]
+    lens_values = [6,8,10]
     
-    plt.figure(figsize=[11,3.25])
+    nrows = len(lens_values)//2+1
+    plt.figure(figsize=[3.666*2, 3.25*nrows])
+    ax_etendue = plt.subplot(nrows,2,len(lens_values)+1)
 
     # NA scan
     for iplot, lens_diameter in enumerate(lens_values):
-        plt.subplot(1,len(lens_values),iplot+1)
+        ax = plt.subplot(nrows,2,iplot+1)
         for na in na_values:
+            plt.sca(ax)
             images = [FiberImage(fiber_diameter=fiber_diameter,
                                  fiber_na=na,
                                  lens_diameter=lens_diameter)
@@ -108,12 +117,13 @@ def plot(save=False):
             plt.plot(fiber_diameters, 
                      spot_diameters, 
                      marker='x', 
-                     label='Fiber NA = {:.2g} (EFL={:.2g} cm)'.format(na,efl))
-            plt.title('Lens diameter = {:.2g} cm'.format(lens_diameter))
-            plt.legend(fontsize='small')
-            plt.xlabel('Fiber diameter (mm)')
+                     label='Fiber NA = {:.2g}\nEFL={:.2g} cm'.format(na,efl))
+            plt.title('Aperture diam. = {:.2g} cm'.format(lens_diameter))
+            plt.legend(fontsize='small',
+                       labelspacing=1)
+            plt.xlabel('Fiber bundle diameter (mm)')
             plt.ylabel('Spot diameter (cm)')
-            for mag in [10,20,30,40]:
+            for mag in [10,20]:
                 plt.plot([0,fiber_diameters.max()], 
                          [0,mag*fiber_diameters.max()/10], 
                          linestyle='--', 
@@ -122,6 +132,17 @@ def plot(save=False):
                 plt.annotate('1/M={:d}'.format(mag), 
                              [fiber_diameters.max(),mag*fiber_diameters.max()/10], 
                              ha='right')
+            if iplot==0:
+                plt.sca(ax_etendue)
+                etendue = [image.etendue for image in images]
+                plt.plot(fiber_diameters,
+                         etendue,
+                         marker='x',
+                         label='Fiber NA = {:.2g}'.format(na))
+                plt.legend(fontsize='small',
+                           labelspacing=1)
+                plt.xlabel('Fiber bundle diameter (mm)')
+                plt.ylabel('Etendue (mm**2-ster)')
     plt.tight_layout()
     if save:
         fname = Path('optics-calculations.pdf')
@@ -129,6 +150,7 @@ def plot(save=False):
     
 
 if __name__=='__main__':
+    plt.close('all')
     # spotsize()
     # plot2()
     # a=FiberImage()

@@ -12,7 +12,6 @@ import vmec_connection
 import beams
 
 # vmec connection
-vmec = vmec_connection.connection()
 
 def plot_heating_beams():
     plt.figure()
@@ -43,6 +42,7 @@ def plot_heating_beams():
             rpt = source+10*beam.r_hat
             l = list(zip(source.tolist(), rpt.tolist()))
             ax.plot(*l, color=col)
+    vmec = vmec_connection.connection()
     if vmec is not None:
         # get VMEC flux surfaces
         eq_tag = 'w7x_ref_9'
@@ -108,28 +108,16 @@ def beam_axis_calculations(pini=2, noplot=False, save=False):
     
 
 def beam_plane_calculations(save=False):
-    for port in ['A21-lolo','A21-lo']:
-        for ip in [0,1]:
-            pinis[ip].plot_vertical_plane(port, save=save)
+    for ipini in [0,1]:
+        pinis[ipini].plot_vertical_plane('A21-lolo', save=save)
     for port in ['W11']:
         pinis[3].plot_vertical_plane(port, save=save)
     
     
 def sightline_calculations(save=False):
-    port = 'A21-lolo'
     r_obs, z_obs = 5.8, -0.4
-    pinis[1].plot_sightline(port, r_obs=r_obs, z_obs=z_obs, save=save)
-    # r_obs, z_obs = 5.88, -0.42
-    # pinis[1].plot_sightline(port, r_obs=r_obs, z_obs=z_obs, save=save)
-    
-    # port = 'A21-lo'
-    # r_obs, z_obs = 5.8, -0.35
-    # pinis[0].plot_sightline(port, r_obs=r_obs, z_obs=z_obs, save=save)
-    # pinis[1].plot_sightline(port, r_obs=r_obs, z_obs=z_obs, save=save)
-    
-    # port = 'W11'
-    # r_obs, z_obs = 5.97, -0.2
-    # pinis[3].plot_sightline(port, r_obs=r_obs, z_obs=z_obs, save=save)
+    for ipini in [0,1]:
+        pinis[ipini].plot_sightline('A21-lolo', r_obs=r_obs, z_obs=z_obs, save=save)
 
 
 if __name__=='__main__':
@@ -137,5 +125,5 @@ if __name__=='__main__':
     # plot_heating_beams()
     # plot_beam_distributions()
     # beam_axis_calculations()
-    # beam_plane_calculations()
-    sightline_calculations()
+    beam_plane_calculations()
+    # sightline_calculations()

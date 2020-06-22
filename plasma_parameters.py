@@ -70,9 +70,10 @@ class Params(object):
                            4.57e-3*np.sqrt(mu*Ti)/Bmag, rtol=rtol))
         self.rho_s = self.c_s / self.Omega_i
         
-        # k @ k*rho-i=0.3
-        self.k = 0.3 / self.rho_i
-        self.lam = 2*np.pi/self.k
+        # # k @ k*rho-i=0.3
+        # self.k1 = 0.1 / self.rho_i
+        # self.k3 = 0.3 / self.rho_i
+        # self.k6 = 0.6 / self.rho_i
                 
     def __str__(self):
         output  = "ne = {:.3g} 1/cm**3".format(self.ne) + "\n"

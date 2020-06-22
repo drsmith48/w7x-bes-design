@@ -10,3 +10,7 @@ __pycache__/
 .ipynb_checkpoints/
 *.pdf
 *.hdf5
+.DS_Store
+*.ipynb
+*.mp4
+*.txt
