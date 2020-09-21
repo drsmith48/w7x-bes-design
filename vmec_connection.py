@@ -22,6 +22,14 @@ def connection():
     return zeep.Client(connection_url)
 
 
+def write_wout_nc(eqtag='w7x_ref_9'):
+    vmec = connection()
+    wout_nc = vmec.service.getVmecOutputNetcdf(eqtag)
+    wout_nc_file = open('wout.nc', 'wb')
+    wout_nc_file.write(wout_nc)
+    wout_nc_file.close()
+
+
 def test():
     plt.close('all')
     
@@ -60,3 +68,4 @@ def test():
 
 if __name__=='__main__':
     test()
+    # write_wout_nc()

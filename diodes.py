@@ -1,0 +1,280 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jul 14 09:45:07 2020
+
+@author: drsmith
+"""
+
+import numpy as np
+import scipy.constants as pc
+import matplotlib.pyplot as plt
+
+
+apd_list = [
+    {'name':'Hamm S8550-2',
+     'qe':0.85,
+     # 'responsivity':0.48,
+     'junction_cap':9e-12,
+     'gain':50,
+     'noise_figure':0.2,
+     },
+    # {'name':'Excelitas C30739ECERH',
+    #  'dark_current':1.5e-9,
+    #  'responsivity':0.35,
+    #  'junction_cap':60e-12,
+    #  'gain':100,
+    #  'noise_current':0.3e-12,
+    #  },
+    # {'name':'Excelitas C30737EH-500-80',
+    #  'dark_current':0.1e-9,
+    #  'responsivity':0.33,
+    #  'junction_cap':2e-12,
+    #  'gain':100,
+    #  'noise_current':0.1e-12,
+    #  },
+    ]
+
+ppd_list = [
+       {'name':'API PDB-C164',
+        'dark_current':1e-9,  # V_b = 10 V, T=20C
+        'junction_cap':7e-12,  # V_b = 10 V, T=20C
+        'responsivity':0.43,
+        },
+       {'name':'API PDB-C160SM',
+        'dark_current':2e-9,  # V_b = 10 V, T=20C
+        'junction_cap':15e-12,  # V_b = 10 V, T=20C
+        'responsivity':0.37,
+        },
+       {'name':'API SD-076',
+        'dark_current':8e-9,  # V_b = 50 V, T=20C
+        'junction_cap':2.5e-12,  # V_b = 50 V, T=20C
+        'responsivity':0.35,
+        },
+       {'name':'API SD-057',
+        'dark_current':0.1e-9,  # V_b = 50 V, T=20C
+        'junction_cap':9e-12,  # V_b = 50 V, T=20C
+        'responsivity':0.4,
+        },
+       {'name':'First Sensor X7-F',
+        'dark_current':0.25e-9,  # V_b = 10 V, T=20C
+        'junction_cap':12e-12,  # V_b = 10 V, T=20C
+        'qe':0.71,
+        },
+       # {'name':'Hamm S13956-1',
+       #  'dark_current':10e-9,  # V_b = 10 mV, T=20C
+       #  'junction_cap':60e-12,  # V_b = 0 V, T=20C
+       #  'responsivity':0.48,
+       #  },
+       {'name':'Hamm S3805',
+        'dark_current':0.1e-9,  # V_b = 10 mV, T=20C
+        'junction_cap':15e-12,  # V_b = 0 V, T=20C
+        'responsivity':0.45,
+        },
+       {'name':'Vishay T1170P',
+        'dark_current':1e-9,  # V_b = 10 V, T=20C
+        'junction_cap':3e-12,  # V_b = 3 V, T=20C
+        'responsivity':0.48,
+        },
+       {'name':'Osram SFH 203 P',
+        'dark_current':1e-9,  # V_b = 10 V, T=20C
+        'junction_cap':2.5e-12,  # V_b = 3 V, T=20C
+        'responsivity':0.46,
+        },
+    ]
+
+
+bandwidth = 1e6  # signal bandwidth [Hz]
+p_ref = 10e-9  # reference power [W]
+t_ref = 20  # reference temp [C]
+vb_ref = 10  # reference reverse bias [V]
+    
+
+class _Diode(object):
+    
+    def __init__(self, 
+                 name='', 
+                 responsivity=0, 
+                 qe=0, 
+                 dark_current=0, 
+                 junction_cap=0,
+                 ):
+        self.name = name
+        self.gain = None
+        self.noise_factor = None
+        if responsivity:
+            # responsivity at 650 nm [A/W]
+            self.responsivity = responsivity
+        elif qe:
+            self.responsivity = qe * 650/1240
+        else:
+            raise ValueError
+        # dark current at V_b=10V, T=20C [nA]
+        # drops by factor of 10 for 20 C decrease
+        # slight increase with V_b
+        self.dark_current_ref = dark_current
+        # junction cap at V_b=10V, T=20C [pF]
+        # sharp decrease with V_b; C_j ~ 1/sqrt(V_b)
+        # C_j(10V) ~ C_j(0V)/5
+        self.junction_cap_ref = junction_cap
+        # shunt resistence at V_b=10mV [MOhm]
+        # self.shunt_res_ref = shunt_res
+        
+    def photocurrent(self, p_inc=p_ref):
+        return self.gain * self.responsivity * p_inc
+    
+    def darkcurrent(self, t=t_ref):
+        return self.gain * self.dark_current_ref * 2**((t-t_ref)/10)
+    
+    def junction_cap(self, vb=vb_ref):
+        return self.junction_cap_ref * np.sqrt(vb_ref)/np.sqrt(vb)
+    
+    # def shunt_res(self, t=t_ref):
+    #     return self.shunt_res_ref * 2**((t-t_ref)/6)
+    
+    def sigmasq_thermal(self, t=t_ref, rload=100e6):
+        # shunt_res = self.shunt_res(t)
+        # r_eff = rload*shunt_res / (rload+shunt_res)
+        return 4*pc.k*(t+273)/rload * bandwidth
+    
+    def sigmasq_shot(self, p_inc=p_ref, t=t_ref):
+        photocurrent = self.photocurrent(p_inc=p_inc)
+        darkcurrent = self.darkcurrent(t=t)
+        return 2*pc.e * self.gain**2 * self.noise_factor \
+            * (photocurrent+darkcurrent) * bandwidth
+    
+    def SNR(self, p_inc=p_ref, t=t_ref, rload=100e6):
+        photocurrent = self.photocurrent(p_inc=p_inc)
+        sigmasq = self.sigmasq_thermal(t=t, rload=rload) \
+            + self.sigmasq_shot(p_inc=p_inc, t=t)
+        return photocurrent**2 / sigmasq
+    
+
+class PinDiode(_Diode):
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.name = self.name + ' (PIN)'
+        self.gain = 1
+        self.noise_factor = 1
+    
+
+class ApdDiode(_Diode):
+    
+    def __init__(self, 
+                 gain=0, 
+                 noise_factor=0,
+                 noise_figure=0,
+                 noise_current=0, 
+                 **kwargs):
+        super().__init__(**kwargs)
+        self.name = self.name + ' (APD)'
+        self.gain = gain
+        if noise_factor:
+            self.noise_factor = noise_factor
+        elif noise_figure:
+            self.noise_factor = 10**(noise_figure/10)
+        elif noise_current:
+            self.noise_factor = 1
+            sigma_sq_ideal = self.sigmasq_shot(p_inc=0)/bandwidth
+            self.noise_factor = noise_current**2 / sigma_sq_ideal
+        else:
+            raise ValueError
+    
+
+def plot_diodes():
+    plt.close('all')
+    diodes = []
+    diodes.extend([PinDiode(**ppd_kw) for ppd_kw in ppd_list])
+    diodes.extend([ApdDiode(**apd_kw) for apd_kw in apd_list])
+    prange = np.array([0.1,0.3,1,3,10,30,100])*1e-9
+    vbrange = np.arange(1,30,1)
+    trange = np.arange(-40,26,5)
+    rload = 10e6
+    plt.figure(figsize=[11.5,8])
+    # photocurrent
+    plt.subplot(3,3,1)
+    for d in diodes:
+        plt.loglog(prange*1e9, d.photocurrent(prange)*1e9, label=d.name)
+    plt.xlabel('Incident Power (nW)')
+    plt.ylabel('Photocurrent (nA)')
+    plt.title('I_photo vs. inc. power')
+    # junction capacitance
+    plt.subplot(3,3,2)
+    for d in diodes:
+        plt.semilogy(vbrange, d.junction_cap(vb=vbrange)*1e12, label=d.name)
+    plt.xlabel('Reverse bias (V)')
+    plt.ylabel('Diode junction cap. (pF)')
+    plt.title('C_j vs. bias')
+    # dark current
+    plt.subplot(3,3,3)
+    for d in diodes:
+        plt.semilogy(trange, d.darkcurrent(t=trange)*1e9, label=d.name)
+    plt.xlabel('Temp. (C)')
+    plt.ylabel('Dark current (nA)')
+    plt.title('I_dark vs. temp.')
+    # # shunt resistance
+    # plt.subplot(3,3,4)
+    # for d in diodes:
+    #     plt.semilogy(trange, d.shunt_res(t=trange)/1e6, label=d.name)
+    # plt.xlabel('Temp. (C)')
+    # plt.ylabel('Shunt resistance (MOhm)')
+    # plt.title('Shunt res. vs. temp.')
+    # thermal noise
+    plt.subplot(3,3,4)
+    for d in diodes:
+        sigmasq = d.sigmasq_thermal(t=trange, rload=rload)
+        plt.plot(trange, np.sqrt(sigmasq)*1e9, label=d.name)
+    plt.xlabel('Temp. (C)')
+    plt.ylabel('sqrt(<i_th^2>*B) (nA)')
+    plt.title('Thermal noise vs. temp.')
+    plt.annotate(f'BW = {bandwidth/1e6} MHz', (0.55,0.15),
+                 xycoords='axes fraction', size='small')
+    plt.annotate(f'R_L = {rload/1e6} MOhm', (0.55,0.05),
+                 xycoords='axes fraction', size='small')
+    # shot nosie
+    plt.subplot(3,3,5)
+    for d in diodes:
+        sigmasq = d.sigmasq_shot(p_inc=prange)
+        plt.loglog(prange*1e9, np.sqrt(sigmasq)*1e9, label=d.name)
+    plt.xlabel('Incident Power (nW)')
+    plt.ylabel('sqrt(<i_sh^2>*B) (nA)')
+    plt.title('Shot noise vs. inc. power')
+    plt.annotate(f'BW = {bandwidth/1e6} MHz', (0.55,0.05),
+                 xycoords='axes fraction', size='small')
+    # shot nosie
+    plt.subplot(3,3,6)
+    p_inc=20e-9
+    for d in diodes:
+        sigmasq = d.sigmasq_shot(p_inc=p_inc, t=trange)
+        plt.semilogy(trange, np.sqrt(sigmasq)*1e9, label=d.name)
+    plt.xlabel('Temp. (C)')
+    plt.ylabel('sqrt(<i_shot^2>*B) (nA)')
+    plt.title('Shot noise vs. temp.')
+    plt.annotate(f'BW = {bandwidth/1e6} MHz', (0.05,0.5),
+                 xycoords='axes fraction', size='small')
+    plt.annotate(f'P_inc = {p_inc*1e9} nW', (0.05,0.4),
+                 xycoords='axes fraction', size='small')
+    # SNR
+    for it, temp in enumerate([20,-20,-190]):
+        plt.subplot(3,3,7+it)
+        for d in diodes:
+            plt.loglog(prange*1e9, d.SNR(p_inc=prange, t=temp, rload=rload), label=d.name)
+        plt.xlabel('Incident power (nW)')
+        plt.ylabel('SNR = (I_ph/I_n)^2')
+        plt.title('SNR vs. inc. power')
+        plt.annotate(f'BW = {bandwidth/1e6} MHz', (0.05,0.9),
+                     xycoords='axes fraction', size='small')
+        plt.annotate(f'R_L = {rload/1e6} MOhm', (0.05,0.8),
+                     xycoords='axes fraction', size='small')
+        plt.annotate(f'T = {temp} C', (0.05,0.7),
+                     xycoords='axes fraction', size='small')
+    # all plots
+    for ax in plt.gcf().axes[3:4]:
+        ax.legend(fontsize='small', labelspacing=0.2, handlelength=1)
+    plt.tight_layout()
+    return diodes
+    
+    
+if __name__=='__main__':
+    diodes = plot_diodes()

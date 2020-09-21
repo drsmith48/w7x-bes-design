@@ -6,7 +6,7 @@ Created on Mon Jun 22 13:16:01 2020
 @author: drsmith
 """
 
-import pathlib
+from pathlib import Path
 import concurrent.futures
 import pickle
 import numpy as np
@@ -47,7 +47,7 @@ class Grid(object):
             self.grid_shape[1],
             np.round(self.r_obs*1e2), 
             np.round(self.z_obs*1e2))
-        pickle_file = pathlib.Path('data_'+self.identifier+'.pickle')
+        pickle_file = Path('data_'+self.identifier+'.pickle')
         try:
             with pickle_file.open('rb') as f:
                 saved_data = pickle.load(f)
@@ -187,8 +187,9 @@ class Grid(object):
         plt.ylabel('Binormal half-excursion (cm)')
         plt.tight_layout()
         if save:
-            fname = 'grid_' + self.identifier+'.pdf'
-            plt.savefig(fname, transparent=True)
+            graphicsdir = Path.cwd().parent / 'graphics'
+            fname = graphicsdir / f'grid_{self.identifier}.pdf'
+            plt.savefig(fname.as_posix(), transparent=True)
         
 
 if __name__=='__main__':
@@ -201,21 +202,21 @@ if __name__=='__main__':
                 grid_shape=[8,8], 
                 c2c_normal=1.2,
                 c2c_binormal=1.2)
-    grid.plot()
-    grid = Grid(beam=p2,
-                port='A21-lolo',
-                r_obs=5.89, 
-                z_obs=-0.39,
-                grid_shape=[8,8], 
-                c2c_normal=1.2,
-                c2c_binormal=1.2)
-    grid.plot()
-    p4 = beams.HeatingBeam(pini=4)
-    grid = Grid(beam=p4,
-                port='W11',
-                r_obs=5.98, 
-                z_obs=-0.16,
-                grid_shape=[8,8], 
-                c2c_normal=1.2,
-                c2c_binormal=1.2)
-    grid.plot()
+    grid.plot(save=True)
+    # grid = Grid(beam=p2,
+    #             port='A21-lolo',
+    #             r_obs=5.89, 
+    #             z_obs=-0.39,
+    #             grid_shape=[8,8], 
+    #             c2c_normal=1.2,
+    #             c2c_binormal=1.2)
+    # grid.plot()
+    # p4 = beams.HeatingBeam(pini=4)
+    # grid = Grid(beam=p4,
+    #             port='W11',
+    #             r_obs=5.98, 
+    #             z_obs=-0.16,
+    #             grid_shape=[8,8], 
+    #             c2c_normal=1.2,
+    #             c2c_binormal=1.2)
+    # grid.plot()

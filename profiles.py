@@ -272,8 +272,9 @@ def fit_profiles(profiles=profiles_default,
         plt.tight_layout()
         fits.append(fit)
         if save_figures:
-            fname = Path('profiles_{}_{:.2f}s.pdf'.format(shot, timearray[tindex]))
-            plt.savefig(fname.as_posix(), format='pdf', transparent=True)
+            graphicsdir = Path.cwd().parent / 'graphics'
+            fname = graphicsdir / 'profiles_{}_{:.2f}s.pdf'.format(shot, timearray[tindex])
+            plt.savefig(fname.as_posix(), transparent=True)
     if save_fits:
         fitfile = 'fits.pickle'
         print('Saving fits in {}'.format(fitfile))
@@ -304,7 +305,7 @@ def profile_calculations(ifit=0,
     # loop over input shots
     for fullfit in fits:
         # plot profiles and gradients
-        plt.figure(figsize=[8.5,4.4])
+        plt.figure(figsize=[8,6.25])
         profiles = {}
         dprofiles = {}
         for ifield,field in enumerate(['ne','te','ti']):
@@ -333,7 +334,11 @@ def profile_calculations(ifit=0,
                                  ))
         rhoi = np.array([param.rho_i for param in params])
         rhos = np.array([param.rho_s for param in params])
-        plt.subplot(2,3,1)
+        legend_kw = {'loc':'upper left', 
+                     'labelspacing':0.2, 
+                     'fontsize':'small', 
+                     'borderpad':0.2,}
+        plt.subplot(2,2,1)
         plt.plot(x, rhoi*1e3, label='rho-i')
         plt.plot(x, rhos*1e3, label='rho-s')
         plt.legend()
@@ -342,25 +347,30 @@ def profile_calculations(ifit=0,
         plt.ylabel('rho-i,s (mm)')
         plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
         # k values for k*rhoi= X
+        krhoi_values = [0.2,0.4,0.6]
         k = np.matmul(1/rhoi.reshape(-1,1),
-                      np.array([0.1,0.3,0.8]).reshape(1,-1))
-        plt.subplot(2,3,2)
+                      np.array(krhoi_values).reshape(1,-1))
+        klabels = [f'k*rhoi = {kval}' for kval in krhoi_values]
+        plt.subplot(2,2,2)
         plt.plot(x, k/1e2)
-        plt.legend(['k*rhoi = 0.1',
-                    'k*rhoi = 0.3',
-                    'k*rhoi = 0.8'])
+        plt.legend(klabels,**legend_kw)
         plt.xlabel('r/a')
         plt.ylabel('k (1/cm)')
-        plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
+        plt.ylim(0,3)
+        # plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
         # 2pi/k
-        plt.subplot(2,3,3)
-        plt.plot(x, 2*np.pi/(k/1e2))
-        plt.legend(['k*rhoi = 0.1',
-                    'k*rhoi = 0.3',
-                    'k*rhoi = 0.8'])
-        plt.xlabel('r/a')
-        plt.ylabel('2pi/k (cm)')
-        plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
+        # plt.subplot(2,2,2)
+        # plt.plot(x, 2*np.pi/(k/1e2))
+        # plt.legend(klabels, **legend_kw)
+        # plt.axvline(0.4, c='k', ls=':')
+        # plt.axvline(0.9, c='k', ls=':')
+        c2c = 2.0
+        plt.axhline(np.pi/c2c, c='k', ls=':')
+        # plt.axhline(8*c2c, c='k', ls=':')
+        # plt.xlabel('r/a')
+        # plt.ylabel('2pi/k (cm)')
+        plt.title('{} | {:.2g} s | C2C={:.2g} cm'.format(
+            fullfit['shot'],fullfit['time'], c2c))
         # omega-star
         Ti_J = np.array([param.Ti_J for param in params])
         Te_J = np.array([param.Te_J for param in params])
@@ -368,30 +378,27 @@ def profile_calculations(ifit=0,
         gradpe_over_n = np.array(Te_J * dprofiles['ne'] / profiles['ne']).reshape(-1,1)
         omega_star_i = (k / pc.e / 2.6) * gradpi_over_n
         omega_star_e = (k / pc.e / 2.6) * gradpe_over_n
-        plt.subplot(2,3,4)
+        plt.subplot(2,2,3)
         plt.plot(x, omega_star_i/(2*np.pi)/1e3)
-        plt.legend(['k*rhoi = 0.1',
-                    'k*rhoi = 0.3',
-                    'k*rhoi = 0.8'])
+        plt.legend(klabels,**legend_kw)
         plt.xlabel('r/a')
         plt.ylabel('omega_star_i (kHz)')
         plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
-        plt.subplot(2,3,5)
+        plt.subplot(2,2,4)
         plt.plot(x, omega_star_e/(2*np.pi)/1e3)
-        plt.legend(['k*rhoi = 0.1',
-                    'k*rhoi = 0.3',
-                    'k*rhoi = 0.8'])
+        plt.legend(klabels,**legend_kw)
         plt.xlabel('r/a')
         plt.ylabel('omega_star_e (kHz)')
         plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
         plt.tight_layout()
         if save:
-            fname = Path('profile_quantities_{}_{:.2g}s.pdf'.format(
-                fullfit['shot'], fullfit['time']))
-            plt.savefig(fname.as_posix(), format='pdf', transparent=True)
+            graphicsdir = Path.cwd().parent / 'graphics'
+            fname = graphicsdir / 'profile_quantities_{}_{:.2g}s.pdf'.format(
+                fullfit['shot'], fullfit['time'])
+            plt.savefig(fname.as_posix(), transparent=True)
 
 
 if __name__=='__main__':
     plt.close('all')
-    # fit_profiles(nohollow=True, save_data=False, save_fits=False)
-    profile_calculations()
+    fit_profiles(nohollow=True, save_data=False, save_fits=False, save_figures=True)
+    profile_calculations(save=True)

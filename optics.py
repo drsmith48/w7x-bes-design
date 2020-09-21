@@ -143,10 +143,13 @@ def plot(save=False):
                            labelspacing=1)
                 plt.xlabel('Fiber bundle diameter (mm)')
                 plt.ylabel('Etendue (mm**2-ster)')
+        plt.sca(ax)
+        plt.axhline(2, ls=':', c='k')
     plt.tight_layout()
     if save:
-        fname = Path('optics-calculations.pdf')
-        plt.savefig(fname.as_posix(), format='pdf', transparent=True)
+        graphicsdir = Path.cwd().parent / 'graphics'
+        fname = graphicsdir / 'optics-calculations.pdf'
+        plt.savefig(fname.as_posix(), transparent=True)
     
 
 if __name__=='__main__':
@@ -154,4 +157,4 @@ if __name__=='__main__':
     # spotsize()
     # plot2()
     # a=FiberImage()
-    plot()
+    plot(save=True)

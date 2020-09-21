@@ -6,7 +6,7 @@ Created on Wed May  8 11:38:30 2019
 @author: drsmith
 """
 
-import pathlib
+from pathlib import Path
 import numpy as np
 from scipy import integrate, constants, optimize
 from scipy.interpolate import CubicSpline
@@ -20,9 +20,7 @@ import cherab.openadas as oa
 import vmec_connection
 
 
-
-# candidate viewing ports for injectors
-# input dimensions are mm
+# candidate port XYZ locations [mm]
 k20_ports = {
              'A21-mid':np.array([1981.8, 6099.4, 0]),
              'A21-lo':np.array([1981.8, 6099.4, -250]),
@@ -79,13 +77,8 @@ del ports
 del value
 
 # vmec connection
-try:
-    vmec = vmec_connection.connection()
-    Points3D = vmec.type_factory('ns1').Points3D
-except:
-    vmec = None
-    Points3D = None
-
+# vmec = vmec_connection.connection()
+# Points3D = vmec.type_factory('ns1').Points3D
 
 
 class _Beam(object):
@@ -95,7 +88,7 @@ class _Beam(object):
                       'r_hat', 's_hat', 't_hat', 'name',
                       'src_width_1', 'src_width_2', 'divergence',
                       'torus_period']
-    _analysisdir = pathlib.Path().absolute()
+    _graphicsdir = Path.cwd().parent / 'graphics'
     _ref_eq = 'w7x_ref_9'
     # ADAS data
     _adas = oa.OpenADAS(permit_extrapolation=True)
@@ -107,6 +100,11 @@ class _Beam(object):
         for attrname in self._required_attr:
             if getattr(self, attrname, None) is None:
                 raise AttributeError('"{}" is not implemented'.format(attrname))
+        self.species = atomic.lookup_isotope(species)
+        self.voltage = bvoltage
+        beam_species_mass = self.species.atomic_weight * constants.m_u
+        self.vbeam = np.sqrt(2 * constants.e * self.voltage / beam_species_mass)
+        print(self.vbeam)
         if not vmec or not Points3D:
             raise ValueError
         self.eq_tag = None
@@ -114,10 +112,6 @@ class _Beam(object):
         self.axis_rpz = None
         self.tantheta = np.tan(self.divergence * np.pi/180)
 
-        self.species = atomic.lookup_isotope(species)
-        self.voltage = bvoltage
-        beam_species_mass = self.species.atomic_weight * constants.m_u
-        self.vbeam = np.sqrt(2 * constants.e * self.voltage / beam_species_mass)
         transition = (3,2)
         ionization_state = 0
         self.wavelength = self._adas.wavelength(self.species, ionization_state, transition)
@@ -133,7 +127,7 @@ class _Beam(object):
         weighted_average = np.average(values, weights=weights)
         weighted_std = np.sqrt(np.average((values-weighted_average)**2,
                                           weights=weights))
-        return weighted_average, weighted_std
+        return np.array([weighted_average, weighted_std])
     
     def set_eq(self, eq_tag=None, axis_spacing=0.04):
         if eq_tag is None:
@@ -240,9 +234,8 @@ class _Beam(object):
         plt.legend(**legend_kwargs)
         plt.tight_layout()
         if save:
-            fname = 'pini_{:d}_axis.pdf'.format(self.injector)
-            fname = self._analysisdir / fname
-            plt.savefig(fname.as_posix(), format='pdf', transparent=True)
+            fname = self._graphicsdir / 'pini_{:d}_axis.pdf'.format(self.injector)
+            plt.savefig(fname.as_posix(), transparent=True)
         # return validports
 
     def plot_3d(self, save=False):
@@ -286,14 +279,7 @@ class _Beam(object):
         plt.tight_layout()
         # return validports
         
-    def plot_vertical_plane(self, 
-                            port='A21-lolo', 
-                            eq_tag=None, 
-                            save=False, 
-                            sp1=None, 
-                            sp2=None):
-        if eq_tag is not None:
-            self.set_eq(eq_tag=eq_tag)
+    def calc_vertical_plane_intensity(self):
         # B vector along beamline in plasma
         mrad_axis = np.linalg.norm(self.axis - self.source.reshape((3,1)), axis=0)
         rlim = [mrad_axis.min()-0.2, mrad_axis.max()+0.05]
@@ -308,10 +294,33 @@ class _Beam(object):
             for it,t in enumerate(tgrid):
                 xyz_values[:,ir,it] = self.source + r*self.r_hat + t*self.t_hat
                 int_values[ir,it] = self.point_intensity(t=t,r=r)
-        intlevels = np.array([0.7,0.8,0.9]) * int_values.max()
         z_values = xyz_values[2,:,:]
         rmaj_values = np.sqrt(xyz_values[0,:,:]**2 + xyz_values[1,:,:]**2)
         rpz_values = self.xyz_to_rpz(xyz_values).reshape(3,-1)
+        return {'ngrid': ngrid,
+                'rpz_values': rpz_values,
+                'xyz_values': xyz_values,
+                'z_values': z_values,
+                'rmaj_values': rmaj_values,
+                'int_values': int_values,
+                }
+    
+    def plot_vertical_plane(self, 
+                            port='A21-lolo', 
+                            eq_tag=None, 
+                            save=False, 
+                            sp1=None, 
+                            sp2=None):
+        if eq_tag is not None:
+            self.set_eq(eq_tag=eq_tag)
+        vint = self.calc_vertical_plane_intensity()
+        ngrid = vint['ngrid']
+        rpz_values = vint['rpz_values']
+        xyz_values = vint['xyz_values']
+        z_values = vint['z_values']
+        rmaj_values = vint['rmaj_values']
+        int_values = vint['int_values']
+        intlevels = np.array([0.7,0.8,0.9]) * int_values.max()
         vmec_stp = vmec.service.toVMECCoordinates(self.eq_tag, 
                                                   Points3D(*rpz_values.tolist()),
                                                   1e-3)
@@ -373,8 +382,8 @@ class _Beam(object):
             plt.tight_layout()
         if save:
             fname = 'port_{}_viewing_pini_{:d}.pdf'.format(port, self.injector)
-            fname = self._analysisdir / fname
-            plt.savefig(fname.as_posix(), format='pdf', transparent=True)
+            fname = self._graphicsdir / fname
+            plt.savefig(fname.as_posix(), transparent=True)
         if sp1 and sp2:
             return ax1, ax2
             
@@ -847,9 +856,11 @@ class Sightline(object):
         self.r_avg = np.average(r_sl, weights=beam_intensity_sl)
         self.z_avg = np.average(z_sl, weights=beam_intensity_sl)
         self.psinorm = psi_sl
+        self.phi = phi_sl
         self.theta = theta_sl
         self.bangle = bangle_sl * 180 / np.pi
         self.intensity = beam_intensity_sl
+        self.imaxbeam = beam_intensity_sl.argmax()
         self.bhat = buvec_sl
         self.bnorm = bnorm_sl
         self.norm_half_excursion = np.abs(np.sum(self.cosn*self.step*self.intensity))/2
@@ -942,7 +953,7 @@ class Sightline(object):
         plt.plot(self.rseq, self.zseq, color='b')
         plt.tight_layout()
         if save:
-            fname = self.beam._analysisdir / 'pini_{:d}_view_from_{}_R{:.0f}_Z{:.0f}.pdf'.format(
+            fname = self.beam._graphicsdir / 'pini_{:d}_view_from_{}_R{:.0f}_Z{:.0f}.pdf'.format(
                     self.beam.injector, 
                     self.port, 
                     np.round(self.r_obs*1e2), 
@@ -950,3 +961,10 @@ class Sightline(object):
             plt.savefig(fname.as_posix(), transparent=True)
 
 
+if __name__=='__main__':
+    plt.close('all')
+    p2 = HeatingBeam(pini=2)
+    p2.plot_vertical_plane(port='A21-lolo')
+    # s = Sightline(p2, port='A21-lolo', r_obs=6.03, z_obs=-0.16)
+    # s = Sightline(p2, port='A21-lolo', r_obs=5.84, z_obs=-0.52)
+    # s.plot_sightline()
