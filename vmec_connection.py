@@ -6,17 +6,24 @@ Created on Sun Feb 17 07:57:55 2019
 @author: drsmith
 """
 
+import platform
 import subprocess
-import zeep
 import matplotlib.pyplot as plt
 import numpy as np
+import zeep
 
 
 
 def connection():
     # connect to VMEC webservice
-    ping = subprocess.run('ping -t2 -c1 esb.ipp-hgw.mpg.de'.split(' '),
-                      capture_output=True)
+    if platform.system().lower() == 'windows':
+        count_str = '-n'
+        timeout_str = '-w'
+    else:
+        count_str = '-c'
+        timeout_str = '-t'
+    ping = subprocess.run(f'ping {count_str} 1 {timeout_str} 2 esb.ipp-hgw.mpg.de'.split(' '),
+                          capture_output=True)
     ping.check_returncode()
     connection_url = "http://esb.ipp-hgw.mpg.de:8280/services/vmec_v5?wsdl"
     return zeep.Client(connection_url)
