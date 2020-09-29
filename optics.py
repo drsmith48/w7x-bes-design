@@ -147,8 +147,7 @@ def plot(save=False):
         plt.axhline(2, ls=':', c='k')
     plt.tight_layout()
     if save:
-        graphicsdir = Path.cwd().parent / 'graphics'
-        fname = graphicsdir / 'optics-calculations.pdf'
+        fname = Path('plots') / 'optics-calculations.pdf'
         plt.savefig(fname.as_posix(), transparent=True)
     
 

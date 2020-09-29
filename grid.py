@@ -202,7 +202,7 @@ if __name__=='__main__':
                 grid_shape=[8,8], 
                 c2c_normal=1.2,
                 c2c_binormal=1.2)
-    grid.plot(save=True)
+    grid.plot(save=False)
     # grid = Grid(beam=p2,
     #             port='A21-lolo',
     #             r_obs=5.89, 

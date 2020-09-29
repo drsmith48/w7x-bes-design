@@ -41,6 +41,7 @@ from scipy.optimize import least_squares
 import scipy.constants as pc
 import hdf5
 from plasma_parameters import Params
+import PCIanalysis.gradientlengths as gl
 
 
 np.random.seed()
@@ -48,7 +49,7 @@ np.random.seed()
 # shot/times for profiles
 profiles_list = [
     [180904027, 1.9, 'post-pellet'],
-    # [180919007, 2.4, 'during NBI'],
+    [180919007, 2.4, 'during NBI'],
     ]
 profiles_default = [{'shot':p[0], 'time':p[1], 'desc':p[2]} for p in profiles_list]
 
@@ -89,18 +90,17 @@ def fit_profiles(profiles=profiles_default,
                  save_fits=False,
                  fit_kwargs={},
                  plot_kwargs={}):
-    prodatafile = 'profiles.pickle'
+    prodatafile = Path('data') / 'profiles.pickle'
     # test profile data file
     try:
-        with open(prodatafile, 'rb') as f:
+        with prodatafile.open('rb') as f:
             prodata = pickle.load(f)
-        print('Data in {}'.format(prodatafile))
+        print('Data in {}'.format(prodatafile.as_posix()))
         for key,value in prodata.items():
             print('  ', key)
             for key2 in value.keys():
                 print('    ', key2)
     except:
-        import PCIanalysis.gradientlengths as gl
         prodata = {}
     fields = ['ne','te','ti']
     labels = ['ne (1e13/cm^3)',
@@ -155,13 +155,10 @@ def fit_profiles(profiles=profiles_default,
                 try:
                     xicsdata = prodata[shot]['xics']
                 except:
-                    try:
-                        datafile = list(Path().glob('*{}*.hdf5'.format(shot)))[0]
-                        print('  Using data in {}'.format(datafile.as_posix()))
-                        xicsdata = hdf5.hdf5ToDict(datafile)
-                        prodata[shot]['xics'] = xicsdata
-                    except:
-                        continue
+                    datafile = list(Path('data').glob('*{}*.hdf5'.format(shot)))[0]
+                    print('  Using data in {}'.format(datafile.as_posix()))
+                    xicsdata = hdf5.hdf5ToDict(datafile)
+                    prodata[shot]['xics'] = xicsdata
                 rho = np.array(xicsdata['dim']['rho'])  # norm. ; 1D
                 ti = np.array(xicsdata['value']['T_ion_Ar'])  # keV ; [time,rho]
                 tierr = np.array(xicsdata['sigma']['T_ion_Ar'])  # keV ; [time,rho]
@@ -272,17 +269,16 @@ def fit_profiles(profiles=profiles_default,
         plt.tight_layout()
         fits.append(fit)
         if save_figures:
-            graphicsdir = Path.cwd().parent / 'graphics'
-            fname = graphicsdir / 'profiles_{}_{:.2f}s.pdf'.format(shot, timearray[tindex])
+            fname = Path('plots') / f'profiles_{shot}_{timearray[tindex]:.2f}s.pdf'
             plt.savefig(fname.as_posix(), transparent=True)
     if save_fits:
-        fitfile = 'fits.pickle'
-        print('Saving fits in {}'.format(fitfile))
-        with open(fitfile, 'wb') as f:
+        fitfile = Path('data') / 'fits.pickle'
+        print('Saving fits in {}'.format(fitfile.as_posix()))
+        with fitfile.open('wb') as f:
             pickle.dump(fits, f)
     if save_data:
-        print('Saving profile data in {}'.format(prodatafile))
-        with open(prodatafile, 'wb') as f:
+        print('Saving profile data in {}'.format(prodatafile.as_posix()))
+        with prodatafile.open('wb') as f:
             pickle.dump(prodata, f)
 
 
@@ -290,8 +286,8 @@ def profile_calculations(ifit=0,
                          all_fits=False,
                          save=False):
     # load data and print contents
-    prodatafile = 'fits.pickle'
-    with open(prodatafile, 'rb') as f:
+    prodatafile = Path.cwd() / 'data' / 'fits.pickle'
+    with prodatafile.open('rb') as f:
         fits = pickle.load(f)
     print('Available fits in {}'.format(prodatafile))
     for i,fit in enumerate(fits):
@@ -392,13 +388,14 @@ def profile_calculations(ifit=0,
         plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
         plt.tight_layout()
         if save:
-            graphicsdir = Path.cwd().parent / 'graphics'
-            fname = graphicsdir / 'profile_quantities_{}_{:.2g}s.pdf'.format(
-                fullfit['shot'], fullfit['time'])
+            fname = Path('plots') / f"profile_quantities_{fullfit['shot']}_{fullfit['time']:.2g}s.pdf"
             plt.savefig(fname.as_posix(), transparent=True)
 
 
 if __name__=='__main__':
     plt.close('all')
-    fit_profiles(nohollow=True, save_data=False, save_fits=False, save_figures=True)
+    fit_profiles(nohollow=True, 
+                 save_data=True, 
+                 save_fits=True, 
+                 save_figures=True)
     profile_calculations(save=True)

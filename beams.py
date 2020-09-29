@@ -15,8 +15,6 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d import Axes3D
-from cherab.core import atomic
-import cherab.openadas as oa
 import vmec_connection
 
 
@@ -77,8 +75,8 @@ del ports
 del value
 
 # vmec connection
-# vmec = vmec_connection.connection()
-# Points3D = vmec.type_factory('ns1').Points3D
+vmec = vmec_connection.connection()
+Points3D = vmec.type_factory('ns1').Points3D
 
 
 class _Beam(object):
@@ -88,33 +86,34 @@ class _Beam(object):
                       'r_hat', 's_hat', 't_hat', 'name',
                       'src_width_1', 'src_width_2', 'divergence',
                       'torus_period']
-    _graphicsdir = Path.cwd().parent / 'graphics'
+    # explect 'plots' sub-directory in current directory
+    _plots_dir = Path('plots')
     _ref_eq = 'w7x_ref_9'
-    # ADAS data
-    _adas = oa.OpenADAS(permit_extrapolation=True)
 
 
-    def __init__(self, axis_spacing=0.04, species='protium', bvoltage=60e3,
+    def __init__(self, axis_spacing=0.04, species='H', bvoltage=60e3,
                  eq_tag=None):
         # check for required attributes
         for attrname in self._required_attr:
             if getattr(self, attrname, None) is None:
                 raise AttributeError('"{}" is not implemented'.format(attrname))
-        self.species = atomic.lookup_isotope(species)
+        self.species = species.upper()
+        if self.species=='H':
+            self.atomic_weight = 1.007
+        elif self.species=='D':
+            self.atomic_weight = 2.014
+        else:
+            raise ValueError
+        self.wavelength = 656.19
         self.voltage = bvoltage
-        beam_species_mass = self.species.atomic_weight * constants.m_u
+        beam_species_mass = self.atomic_weight * constants.m_u
         self.vbeam = np.sqrt(2 * constants.e * self.voltage / beam_species_mass)
-        print(self.vbeam)
         if not vmec or not Points3D:
             raise ValueError
         self.eq_tag = None
         self.axis = None
         self.axis_rpz = None
         self.tantheta = np.tan(self.divergence * np.pi/180)
-
-        transition = (3,2)
-        ionization_state = 0
-        self.wavelength = self._adas.wavelength(self.species, ionization_state, transition)
         self.set_eq(eq_tag=eq_tag, axis_spacing=axis_spacing)
         vmec_bvec = vmec.service.magneticField(self.eq_tag, 
                                                Points3D(*self.axis.tolist()))
@@ -229,12 +228,12 @@ class _Beam(object):
         plt.ylabel('Doppler shift (nm)')
         plt.ylim(-6,6)
         plt.title(plot_title)
-        plt.annotate('{} @ {:.1f} keV'.format(self.species.symbol, self.voltage/1e3),
+        plt.annotate('{} @ {:.1f} keV'.format(self.species, self.voltage/1e3),
                      [0.03,0.03], xycoords='axes fraction')
         plt.legend(**legend_kwargs)
         plt.tight_layout()
         if save:
-            fname = self._graphicsdir / 'pini_{:d}_axis.pdf'.format(self.injector)
+            fname = self._plots_dir / 'pini_{:d}_axis.pdf'.format(self.injector)
             plt.savefig(fname.as_posix(), transparent=True)
         # return validports
 
@@ -376,13 +375,13 @@ class _Beam(object):
         plt.contour(rmaj_values, z_values, psi_values, colors='k')
         plt.contour(rmaj_values, z_values, int_values, 
                     colors='k', levels=intlevels)
-        plt.annotate('{} @ {:.1f} keV'.format(self.species.symbol, self.voltage/1e3),
+        plt.annotate('{} @ {:.1f} keV'.format(self.species, self.voltage/1e3),
                      [0.03,0.92], xycoords='axes fraction')
         if not sp1 or not sp2:
             plt.tight_layout()
         if save:
             fname = 'port_{}_viewing_pini_{:d}.pdf'.format(port, self.injector)
-            fname = self._graphicsdir / fname
+            fname = self._plots_dir / fname
             plt.savefig(fname.as_posix(), transparent=True)
         if sp1 and sp2:
             return ax1, ax2
@@ -953,18 +952,19 @@ class Sightline(object):
         plt.plot(self.rseq, self.zseq, color='b')
         plt.tight_layout()
         if save:
-            fname = self.beam._graphicsdir / 'pini_{:d}_view_from_{}_R{:.0f}_Z{:.0f}.pdf'.format(
-                    self.beam.injector, 
-                    self.port, 
-                    np.round(self.r_obs*1e2), 
-                    np.round(self.z_obs*1e2))
+            fname = self.beam._plots_dir / \
+                        'pini_{:d}_view_from_{}_R{:.0f}_Z{:.0f}.pdf'.format(
+                            self.beam.injector, 
+                            self.port, 
+                            np.round(self.r_obs*1e2), 
+                            np.round(self.z_obs*1e2))
             plt.savefig(fname.as_posix(), transparent=True)
 
 
 if __name__=='__main__':
     plt.close('all')
     p2 = HeatingBeam(pini=2)
-    p2.plot_vertical_plane(port='A21-lolo')
-    # s = Sightline(p2, port='A21-lolo', r_obs=6.03, z_obs=-0.16)
+    p2.plot_vertical_plane(port='A21-lolo', save=True)
+    s = Sightline(p2, port='A21-lolo', r_obs=6.03, z_obs=-0.16)
     # s = Sightline(p2, port='A21-lolo', r_obs=5.84, z_obs=-0.52)
-    # s.plot_sightline()
+    s.plot_sightline(save=True)
