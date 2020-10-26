@@ -7,11 +7,11 @@ Created on Mon May 11 12:39:00 2020
 """
 
 from pathlib import Path
+import struct
 import numpy as np
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 from filters import make_filters
-from pyfidasim import load_dict
 
 
 class Fida(object):
@@ -19,28 +19,78 @@ class Fida(object):
     def __init__(self, simdir=None):
         self.workdir = Path('data') / 'FIDASIM'
         # set fidasim results directory
-        if simdir:
-            if Path(simdir).exists():
-                simdir = Path(simdir)
-            else:
-                simdir = self.workdir/simdir
+        if not simdir:
+            simdir = self.workdir / 'fida_0046'
+        if Path(simdir).exists():
+            simdir = Path(simdir)
         else:
-            simdir = self.workdir / 'A21_HIHI_P6_Z46'
-        assert(simdir.exists())
+            if Path(self.workdir/simdir).exists():
+                simdir = self.workdir/simdir
+            else:
+                raise FileNotFoundError
         print('FIDASIM results: {}'.format(simdir.as_posix()))
         
+        npfp32 = np.dtype(np.float32())
+        npfp64 = np.dtype(np.float64())
+    
         # load nbi/halo spectra file
-        specfile = simdir / 'spec.hdf5'
-        assert(specfile.exists())
-        spec = load_dict(specfile)
-        self.nlos = spec['nlos']
-        self.lambda_array = spec['wavel']
-        self.spectra = np.moveaxis(spec['intens'], 0, -1)
-        self.losnames = [value.decode() for value in spec['losname']]
-        
+        nbifile = simdir / 'nbi_halo_spectra.bin'
+        assert(nbifile.exists())
+        with nbifile.open('rb') as f:
+            f.seek(8)
+            self.nlos = struct.unpack('<i', f.read(4))[0]
+            nlambda = struct.unpack('<i', f.read(4))[0]
+            self.spectra = np.empty((self.nlos,nlambda,0))
+            self.lambda_array = np.fromfile(f, count=nlambda, dtype=npfp32)
+            tmp = np.fromfile(f, count=nlambda*self.nlos, dtype=npfp32) # full energy
+            self.spectra = np.append(self.spectra, tmp.reshape(self.nlos,nlambda,1), axis=2)
+            tmp = np.fromfile(f, count=nlambda*self.nlos, dtype=npfp32) # half energy
+            self.spectra = np.append(self.spectra, tmp.reshape(self.nlos,nlambda,1), axis=2)
+            tmp = np.fromfile(f, count=nlambda*self.nlos, dtype=npfp32) # third energy
+            self.spectra = np.append(self.spectra, tmp.reshape(self.nlos,nlambda,1), axis=2)
+            tmp = np.fromfile(f, count=nlambda*self.nlos, dtype=npfp32) # thermal halo
+            self.spectra = np.append(self.spectra, tmp.reshape(self.nlos,nlambda,1), axis=2)
         self.lambda_resolution = self.lambda_array[1] - self.lambda_array[0]
+        print('No. lines of sight:', self.nlos)
+        print('No. waveleghts:', nlambda)
+        print('Min/Max wavelength: {:.1f} nm / {:.1f} nm'.format(self.lambda_array.min(),
+                                                                 self.lambda_array.max()))
+        print('Wavelength resolution: {:.3f} nm'.format(self.lambda_resolution))
+        # load afida/pfida spectra file
+        fidafile = simdir / 'fida_spectra.bin'
+        assert(fidafile.exists())
+        with fidafile.open('rb') as f:
+            f.seek(8)
+            self.nlos = struct.unpack('<i', f.read(4))[0]
+            nlambda = struct.unpack('<i', f.read(4))[0]
+            self.lambda_array = np.fromfile(f, count=nlambda, dtype=npfp32)
+            tmp = np.fromfile(f, count=nlambda*self.nlos, dtype=npfp32) # act. FIDA
+            self.spectra = np.append(self.spectra, tmp.reshape(self.nlos,nlambda,1), axis=2)
+            tmp = np.fromfile(f, count=nlambda*self.nlos, dtype=npfp32) # pass. FIDA
+            self.spectra = np.append(self.spectra, tmp.reshape(self.nlos,nlambda,1), axis=2)
         self.spectra_raw = self.spectra.copy()
         self.calc_radiance()
+        # load diag file
+        diagfile = simdir / 'diag.bin'
+        assert(diagfile.exists())
+        with diagfile.open('rb') as f:
+            # print('open', f.tell())
+            self.nlos = struct.unpack('<i', f.read(4))[0]
+            # print('self.nlos', f.tell())
+            xyzhead = np.fromfile(f, count=self.nlos*3, dtype=npfp64)
+            xyzhead = xyzhead.reshape(3,self.nlos)
+            # print('xyzhead', f.tell())
+            xyzlos = np.fromfile(f, count=self.nlos*3, dtype=npfp64)
+            xyzlos = xyzlos.reshape(3,self.nlos)
+            # print('xyzlos', f.tell())
+            tmp = np.fromfile(f, count=self.nlos, dtype=npfp64)  # headsize
+            tmp = np.fromfile(f, count=self.nlos, dtype=npfp64)  # opening_angle
+            tmp = np.fromfile(f, count=self.nlos, dtype=npfp64)  # sigma_pi
+            tmp = np.fromfile(f, count=self.nlos, dtype=npfp64)  # instfu
+            read = f.read(self.nlos*20)
+        form = '<'+''.join(['{}s'.format(20)]*self.nlos)
+        unpack = struct.unpack(form, read)
+        self.losnames = [value.decode().rstrip() for value in unpack]
         
     def apply_filter(self, ifilter=-1, edge=657):
         if ifilter==-1:
@@ -68,6 +118,8 @@ class Fida(object):
             print('  {:2d}: {}'.format(i,los))
             
     def plot(self, ilos=0, ax=None, plot_all=False, save=False):
+        print(self.spectra_raw.shape)
+        print(self.radiance.shape)
         if not isinstance(ilos, np.ndarray):
             if not isinstance(ilos, (list, tuple)):
                 ilos= [ilos]
@@ -81,7 +133,7 @@ class Fida(object):
             nrow = ilos.size // ncol
             if ilos.size % ncol:
                 nrow += 1
-            plt.figure(figsize=[4.5*ncol,3.3*nrow])
+            plt.figure(figsize=[4.5*ncol,3.5*nrow])
         for iplot, i in enumerate(ilos):
             print('Plotting LOS {}: {}'.format(i, self.losnames[i]))
             if ax:
@@ -89,10 +141,10 @@ class Fida(object):
             else:
                 plt.subplot(nrow, ncol, iplot+1)
             plt.plot(self.lambda_array, self.spectra[i,:,:])
-            plt.legend(['Full ({:.2g} Ph/s/m2/st)'.format(self.radiance[i,0]),
-                        'Half ({:.2g} Ph/s/m2/st)'.format(self.radiance[i,1]),
-                        'Third ({:.2g} Ph/s/m2/st)'.format(self.radiance[i,2]),
-                        'Th CX ({:.2g} Ph/s/m2/st)'.format(self.radiance[i,3]),
+            plt.legend(['Full ({:.2g} Ph/m2/st)'.format(self.radiance[i,0]),
+                        'Half ({:.2g} Ph/m2/st)'.format(self.radiance[i,1]),
+                        'Third ({:.2g} Ph/m2/st)'.format(self.radiance[i,2]),
+                        'Th halo ({:.2g} Ph/m2/st)'.format(self.radiance[i,3]),
                         # 'aFIDA ({:.2g} Ph/m2/st)'.format(self.radiance[i,4]),
                         # 'pFIDA ({:.2g} Ph/m2/st)'.format(self.radiance[i,5]),
                         ],
@@ -101,19 +153,17 @@ class Fida(object):
                        labelspacing=0.2,
                        handlelength=1.0,
                        handletextpad=0.4,
-                       fontsize='medium')
+                       fontsize='small')
             plt.xlabel('Wavelength (nm)')
             plt.xlim(652,662)
-            plt.ylim(0,2e18)
-            plt.ylabel('Spect. radiance (Ph/s/m2/st/nm)')
+            plt.ylabel('Spect. radiance (Ph/m2/st/nm)')
             plt.title(self.losnames[i])
         plt.tight_layout()
         if save:
-            fname = Path('plots') / f'{self.losnames[ilos[0]]}.pdf'
-            print(f'Saving {fname.as_posix()}')
+            fname = Path('plots') / f'{self.losnames[i]}.pdf'
             plt.savefig(fname.as_posix(), transparent=True)
                     
-    def plot_array(self, ilos=None, passband=[657.5,661], save=False):
+    def plot_array(self, ilos=None, passband=[657,661], save=False):
         if not isinstance(ilos, np.ndarray):
             if not isinstance(ilos, (list, tuple)):
                 ilos= [ilos]
@@ -134,21 +184,22 @@ class Fida(object):
             width=0.25
             plt.subplot(1,2,i+1)
             plt.bar(idx-width/2, beam_radiance, width, label='Beam')
-            plt.bar(idx+width/2, halo_radiance, width, label='Th CX')
+            plt.bar(idx+width/2, halo_radiance, width, label='Thermal halo')
             plt.xticks(ticks=idx, labels=losnames, size='small',
                        rotation=-45, ha='left', va='top')
-            plt.ylabel('Radiance (Ph/s/m^2/ster)')
+            plt.ylabel('Radiance (Ph/m^2/ster)')
             if i==0:
                 plt.title('Full spectrum')
+                plt.yscale('log')
+                plt.ylim(1e15,1e18)
             else:
                 plt.title(f'Passband {passband[0]}-{passband[1]} nm')
-            plt.yscale('log')
-            plt.ylim([1e15,None])
+                plt.yscale('log')
+                plt.ylim(1e15,1e18)
             plt.legend(fontsize='small')
         plt.tight_layout()
         if save:
             fname = Path('plots') / f'fida_array_{losnames[0]}.pdf'
-            print(f'Saving {fname.as_posix()}')
             plt.savefig(fname.as_posix(), transparent=True)
             
 def plot_filter_comparison(ifilter=0, save=False):
@@ -171,28 +222,19 @@ def plot_filter_comparison(ifilter=0, save=False):
                      size='small')
     if save:
         fname = Path('plots') / 'fida_filter.pdf'
-        print(f'Saving {fname.as_posix()}')
         plt.savefig(fname.as_posix(), transparent=True)
     
             
 
 if __name__ == '__main__':
     plt.close('all')
-    f = Fida(simdir='A21_HIHI_P6')
-    # f = Fida(simdir='W30_P7')
-    ilos=[]
-    for iname,name in enumerate(f.losnames):
-        # if 'Z18' in name:
-        if 'Z42' in name:
-            ilos.append(iname)
-    f.plot(ilos=ilos, save=True)
-    # f.plot_array(ilos=ilos, save=True, passband=[653,655.3])
-    f.plot_array(ilos=ilos, save=True)
+    f = Fida(simdir='A21_P2')
+    f.plot()
     # ilos = np.arange(0,42,6)
     # f.plot(ilos=ilos+3, save=True)
-    # f.plot(ilos=3)
+    # # f.plot(ilos=3)
     # f.plot_array(ilos=ilos+3, save=True)
-    # f.apply_filter(ifilter=0, edge=657.4)
-    # f.plot(ilos=ilos+3)
-    # f.plot(ilos=3)
+    # # f.apply_filter(ifilter=0, edge=657.4)
+    # # f.plot(ilos=ilos+3)
+    # # f.plot(ilos=3)
     # plot_filter_comparison(save=True)

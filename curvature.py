@@ -20,7 +20,12 @@ keys = ['R', 'Z', 'Jacobian', 'dR_ds', 'dR_du', 'dR_dv', 'dZ_ds', 'dZ_du', 'dZ_d
         'Bmod', 'dBmod_ds', 'dBmod_du', 'dBmod_dv', 'Bs', 'Bu', 'Bv', 
         'dBs_du', 'dBs_dv', 'dBu_ds', 'dBu_dv', 'dBv_ds', 'dBv_du']    
 
-wout = wout_read.readWout('', name='wout.nc', diffAmps=True, curvAmps=True)
+vmec_file = Path('data') / 'wout.nc'
+
+wout = wout_read.readWout('', 
+                          name=vmec_file.as_posix(), 
+                          diffAmps=True, 
+                          curvAmps=True)
 
 
 def calc_vtk():
@@ -167,8 +172,7 @@ def plot_curvature(sl=None, save=False):
     plt.plot(phi*180/np.pi, theta*180/np.pi, 'mx', mew=2)
     plt.tight_layout()
     if save:
-        graphicsdir = Path.cwd().parent / 'graphics'
-        fname = graphicsdir/'curvature.pdf'
+        fname = Path('plots') / 'curvature.pdf'
         plt.savefig(fname.as_posix(), transparent=True)
 
 

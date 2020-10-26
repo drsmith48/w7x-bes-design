@@ -91,7 +91,10 @@ class _Beam(object):
     _ref_eq = 'w7x_ref_9'
 
 
-    def __init__(self, axis_spacing=0.04, species='H', bvoltage=60e3,
+    def __init__(self, 
+                 axis_spacing=0.04, 
+                 species='H', 
+                 bvoltage=60e3,
                  eq_tag=None):
         # check for required attributes
         for attrname in self._required_attr:
@@ -156,12 +159,12 @@ class _Beam(object):
         self.daxis = np.linalg.norm(self.axis - self.source.reshape((3,1)), axis=0)
         self.axis_rpz = self.xyz_to_rpz(self.axis)
 
-    def plot_onaxis(self, b_angle_limit=15, save=False, noplot=False):
+    def plot_onaxis(self, b_angle_limit=9, save=False, noplot=False):
         # get B vector along beam axis
-        vmec_stp = vmec.service.toVMECCoordinates(self.eq_tag, 
-                                                  Points3D(*self.axis_rpz.tolist()),
-                                                  1e-3)
-        stp = np.array([vmec_stp.x1, vmec_stp.x2, vmec_stp.x3])
+        # vmec_stp = vmec.service.toVMECCoordinates(self.eq_tag, 
+        #                                           Points3D(*self.axis_rpz.tolist()),
+        #                                           1e-3)
+        # stp = np.array([vmec_stp.x1, vmec_stp.x2, vmec_stp.x3])
         bmod = np.linalg.norm(self.bvec, axis=0)
         bunit = self.bvec/bmod
         # port sightline calculations
@@ -187,14 +190,14 @@ class _Beam(object):
                 validports.append(portname)
         if noplot:
             return validports
+        plot_title = f'{self.name} axis | {self.eq_tag}'
         #### plot quanitities along beam axis
-        plt.figure(figsize=(7.55,5.6))
-        plt.subplot(2,2,1)
-        plt.plot(self.daxis, stp[0,:], '-x')
-        plt.xlabel('Dist. along beam axis [m]')
-        plt.ylabel('psi norm')
-        plot_title = '{} axis'.format(self.name)
-        plt.title(plot_title)
+        plt.figure(figsize=(12,2.8))
+        # plt.subplot(1,4,1)
+        # plt.plot(self.daxis, stp[0,:], '-x')
+        # plt.xlabel('Dist. along beam axis [m]')
+        # plt.ylabel('psi norm')
+        # plt.title(plot_title)
         # plot angles w/ ports along beam axis
         legend_kwargs = {'loc':'upper right',
                         'ncol':3, 
@@ -202,8 +205,9 @@ class _Beam(object):
                         'handletextpad':0.5,
                         'handlelength':1,
                         'labelspacing':0.25,
-                        'fontsize':'small'}
-        plt.subplot(2,2,2)
+                        # 'fontsize':'small',
+                        }
+        plt.subplot(1,3,1)
         for portname in validports:
             plt.plot(self.daxis, port_angles[portname], label=portname)
         plt.xlabel('Dist. along beam axis [m]')
@@ -212,7 +216,7 @@ class _Beam(object):
         plt.title(plot_title)
         plt.legend(**legend_kwargs)
         # plot distance from port to obs. volume on axis
-        plt.subplot(2,2,3)
+        plt.subplot(1,3,2)
         for portname in validports:
             plt.plot(self.daxis, port_distances[portname], label=portname)
         plt.xlabel('Dist. along beam axis [m]')
@@ -221,7 +225,7 @@ class _Beam(object):
         plt.title(plot_title)
         plt.legend(**legend_kwargs)
         # plot doppler shift
-        plt.subplot(2,2,4)
+        plt.subplot(1,3,3)
         for portname in validports:
             plt.plot(self.daxis, port_dshift[portname], label=portname)
         plt.xlabel('Dist. along beam axis [m]')
@@ -233,7 +237,8 @@ class _Beam(object):
         plt.legend(**legend_kwargs)
         plt.tight_layout()
         if save:
-            fname = self._plots_dir / 'pini_{:d}_axis.pdf'.format(self.injector)
+            fname = self._plots_dir / f'P{self.injector:d}_{self.eq_tag}_onaxis.pdf'
+            print(f'Saving {fname.as_posix()}')
             plt.savefig(fname.as_posix(), transparent=True)
         # return validports
 
@@ -338,6 +343,7 @@ class _Beam(object):
         b_angle = np.arccos(np.sum(sl_hat*b_hat, axis=0)) * 180/np.pi
         b_angle[np.isnan(b_angle)] = 90
         b_angle = 90-np.abs(b_angle-90)
+        title_base = f'{port} | {self.name} | {self.eq_tag}'
         if sp1 and sp2:
             ax1 = plt.subplot(sp1)
         else:
@@ -349,9 +355,10 @@ class _Beam(object):
         plt.clim(0,15)
         plt.xlabel('R [m]')
         plt.ylabel('z [m]')
-        plt.title('{} | {} | {} B-angle'.format(self.name, self.eq_tag, port))
+        plt.title(f'{title_base} | B-angle')
         plt.gca().set_aspect('equal')
-        plt.colorbar()
+        cb = plt.colorbar()
+        cb.ax.set_ylabel('Field align. (deg)', rotation=-90, va='bottom')
         plt.contour(rmaj_values, z_values, psi_values, colors='k')
         plt.contour(rmaj_values, z_values, int_values, 
                     colors='k', levels=intlevels)
@@ -369,9 +376,10 @@ class _Beam(object):
         plt.clim(-4,4)
         plt.xlabel('R [m]')
         plt.ylabel('z [m]')
-        plt.title('{} | {} | {} Doppler'.format(self.name, self.eq_tag, port))
+        plt.title(f'{title_base} | Doppler')
         plt.gca().set_aspect('equal')
-        plt.colorbar()
+        cb = plt.colorbar()
+        cb.ax.set_ylabel('Doppler shift (nm)', rotation=-90, va='bottom')
         plt.contour(rmaj_values, z_values, psi_values, colors='k')
         plt.contour(rmaj_values, z_values, int_values, 
                     colors='k', levels=intlevels)
@@ -380,8 +388,8 @@ class _Beam(object):
         if not sp1 or not sp2:
             plt.tight_layout()
         if save:
-            fname = 'port_{}_viewing_pini_{:d}.pdf'.format(port, self.injector)
-            fname = self._plots_dir / fname
+            fname = self._plots_dir / f'{port}_P{self.injector:d}_{self.eq_tag}.pdf'
+            print(f'Saving {fname.as_posix()}')
             plt.savefig(fname.as_posix(), transparent=True)
         if sp1 and sp2:
             return ax1, ax2
@@ -728,7 +736,7 @@ class Sightline(object):
         # sightline unit vector
         uvector_sl = sightline / obs_distance
         # step interval along sightline
-        step_sl= 0.025
+        step_sl= 0.02
         # distance array along sightline (near beam axis)
         dist_sl = np.arange(-0.4, 0.4*(1+1e-4), step_sl) + obs_distance
         # x,y,z coords along sightline (near beam axis)
@@ -964,7 +972,10 @@ class Sightline(object):
 if __name__=='__main__':
     plt.close('all')
     p2 = HeatingBeam(pini=2)
+    # p2.plot_onaxis(save=True)
     p2.plot_vertical_plane(port='A21-lolo', save=True)
-    s = Sightline(p2, port='A21-lolo', r_obs=6.03, z_obs=-0.16)
+    p2.set_eq(eq_tag='w7x_ref_29')
+    p2.plot_vertical_plane(port='A21-lolo', save=True)
+    # s = Sightline(p2, port='A21-lolo', r_obs=6.03, z_obs=-0.16)
     # s = Sightline(p2, port='A21-lolo', r_obs=5.84, z_obs=-0.52)
-    s.plot_sightline(save=True)
+    # s.plot_sightline(save=True)

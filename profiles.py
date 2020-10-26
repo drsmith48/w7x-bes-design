@@ -49,7 +49,7 @@ np.random.seed()
 # shot/times for profiles
 profiles_list = [
     [180904027, 1.9, 'post-pellet'],
-    [180919007, 2.4, 'during NBI'],
+    # [180919007, 2.4, 'during NBI'],
     ]
 profiles_default = [{'shot':p[0], 'time':p[1], 'desc':p[2]} for p in profiles_list]
 
@@ -269,7 +269,8 @@ def fit_profiles(profiles=profiles_default,
         plt.tight_layout()
         fits.append(fit)
         if save_figures:
-            fname = Path('plots') / f'profiles_{shot}_{timearray[tindex]:.2f}s.pdf'
+            fname = Path('plots') / f'profiles_{shot}_{timearray[tindex]*1e3:.0f}s.pdf'
+            print(f'Saving {fname.as_posix()}')
             plt.savefig(fname.as_posix(), transparent=True)
     if save_fits:
         fitfile = Path('data') / 'fits.pickle'
@@ -277,16 +278,17 @@ def fit_profiles(profiles=profiles_default,
         with fitfile.open('wb') as f:
             pickle.dump(fits, f)
     if save_data:
-        print('Saving profile data in {}'.format(prodatafile.as_posix()))
+        print('Saving profiles data in {}'.format(prodatafile.as_posix()))
         with prodatafile.open('wb') as f:
             pickle.dump(prodata, f)
 
 
 def profile_calculations(ifit=0,
                          all_fits=False,
+                         c2c=[1.5,2], 
                          save=False):
     # load data and print contents
-    prodatafile = Path.cwd() / 'data' / 'fits.pickle'
+    prodatafile = Path('data') / 'fits.pickle'
     with prodatafile.open('rb') as f:
         fits = pickle.load(f)
     print('Available fits in {}'.format(prodatafile))
@@ -312,16 +314,6 @@ def profile_calculations(ifit=0,
             dprofiles[field] = dfeval(fit['params'], 
                                       x/fit['xmax'], 
                                       nohollow=fit['nohollow'])
-            # plt.subplot(2,3,1+ifield*2)
-            # plt.plot(x, profiles[field])
-            # plt.xlabel('r/a')
-            # plt.ylabel(fit['label'])
-            # plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
-            # plt.subplot(2,3,2+ifield*2)
-            # plt.plot(x, dprofiles[field] / profiles[field])
-            # plt.xlabel('r/a')
-            # plt.ylabel('d/drho ln({})'.format(field))
-            # plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
         params = []
         for ix in np.arange(x.size):
             params.append(Params(ne=profiles['ne'][ix]*1e13,
@@ -333,7 +325,8 @@ def profile_calculations(ifit=0,
         legend_kw = {'loc':'upper left', 
                      'labelspacing':0.2, 
                      'fontsize':'small', 
-                     'borderpad':0.2,}
+                     # 'borderpad':0.2,
+                     }
         plt.subplot(2,2,1)
         plt.plot(x, rhoi*1e3, label='rho-i')
         plt.plot(x, rhos*1e3, label='rho-s')
@@ -349,24 +342,16 @@ def profile_calculations(ifit=0,
         klabels = [f'k*rhoi = {kval}' for kval in krhoi_values]
         plt.subplot(2,2,2)
         plt.plot(x, k/1e2)
-        plt.legend(klabels,**legend_kw)
         plt.xlabel('r/a')
         plt.ylabel('k (1/cm)')
         plt.ylim(0,3)
-        # plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
-        # 2pi/k
-        # plt.subplot(2,2,2)
-        # plt.plot(x, 2*np.pi/(k/1e2))
-        # plt.legend(klabels, **legend_kw)
-        # plt.axvline(0.4, c='k', ls=':')
-        # plt.axvline(0.9, c='k', ls=':')
-        c2c = 2.0
-        plt.axhline(np.pi/c2c, c='k', ls=':')
-        # plt.axhline(8*c2c, c='k', ls=':')
-        # plt.xlabel('r/a')
-        # plt.ylabel('2pi/k (cm)')
-        plt.title('{} | {:.2g} s | C2C={:.2g} cm'.format(
-            fullfit['shot'],fullfit['time'], c2c))
+        for c in c2c:
+            plt.axhline(np.pi/c, c='k', ls=':')
+            plt.annotate(f'k_max with C2C={c:.1f} cm', (0,np.pi/c), 
+                         xytext=(1,3),
+                         textcoords='offset points')
+        plt.title(f"{fullfit['shot']} | {fullfit['time']:.2g} s")
+        plt.legend(klabels,**legend_kw)
         # omega-star
         Ti_J = np.array([param.Ti_J for param in params])
         Te_J = np.array([param.Te_J for param in params])
@@ -388,7 +373,8 @@ def profile_calculations(ifit=0,
         plt.title('{} | {:.2g} s'.format(fullfit['shot'],fullfit['time']))
         plt.tight_layout()
         if save:
-            fname = Path('plots') / f"profile_quantities_{fullfit['shot']}_{fullfit['time']:.2g}s.pdf"
+            fname = Path('plots') / f"k-omega_{fullfit['shot']}_{fullfit['time']*1e3:.0f}ms.pdf"
+            print(f'Saving {fname.as_posix()}')
             plt.savefig(fname.as_posix(), transparent=True)
 
 
@@ -397,5 +383,5 @@ if __name__=='__main__':
     fit_profiles(nohollow=True, 
                  save_data=True, 
                  save_fits=True, 
-                 save_figures=True)
-    profile_calculations(save=True)
+                 save_figures=False)
+    profile_calculations(save=False)
