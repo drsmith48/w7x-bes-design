@@ -118,9 +118,6 @@ class _Beam(object):
         self.axis_rpz = None
         self.tantheta = np.tan(self.divergence * np.pi/180)
         self.set_eq(eq_tag=eq_tag, axis_spacing=axis_spacing)
-        vmec_bvec = vmec.service.magneticField(self.eq_tag, 
-                                               Points3D(*self.axis.tolist()))
-        self.bvec = np.array([vmec_bvec.x1, vmec_bvec.x2, vmec_bvec.x3])
     
     @staticmethod
     def weighted_avg(values, weights):
@@ -158,7 +155,48 @@ class _Beam(object):
         self.naxis = self.axis.shape[1]
         self.daxis = np.linalg.norm(self.axis - self.source.reshape((3,1)), axis=0)
         self.axis_rpz = self.xyz_to_rpz(self.axis)
+        vmec_bvec = vmec.service.magneticField(self.eq_tag, 
+                                               Points3D(*self.axis.tolist()))
+        self.bvec = np.array([vmec_bvec.x1, vmec_bvec.x2, vmec_bvec.x3])
+        self.calc_vertical_plane_intensity()
 
+    def calc_vertical_plane_intensity(self):
+        # B vector along beamline in plasma
+        rlim = [self.daxis.min()-0.2, self.daxis.max()+0.05]
+        tlim = [-0.40,0.40]
+        # plot beam intensity in r,t plane at s=0
+        ngrid = 100
+        rgrid = np.linspace(rlim[0],rlim[1],num=ngrid)
+        tgrid = np.linspace(tlim[0],tlim[1],num=ngrid)
+        int_values = np.empty([ngrid,ngrid])
+        xyz_values = np.empty([3,ngrid,ngrid])
+        for ir,r in enumerate(rgrid):
+            for it,t in enumerate(tgrid):
+                xyz_values[:,ir,it] = self.source + r*self.r_hat + t*self.t_hat
+                int_values[ir,it] = self.point_intensity(t=t,r=r)
+        z_values = xyz_values[2,:,:]
+        rmaj_values = np.sqrt(xyz_values[0,:,:]**2 + xyz_values[1,:,:]**2)
+        rpz_values = self.xyz_to_rpz(xyz_values).reshape(3,-1)
+        vmec_stp = vmec.service.toVMECCoordinates(self.eq_tag, 
+                                                  Points3D(*rpz_values.tolist()),
+                                                  1e-4)
+        psi_values = np.array(vmec_stp.x1).reshape(ngrid,ngrid)
+        phi = self.axis_rpz[1,:].mean()
+        lcfs = vmec.service.getFluxSurfaces(self.eq_tag, [phi], 
+                                          1.0, 120) # returns list of Points3D[R,phi,Z]
+        # lcfs_list = [[pt.x1,pt.x2,pt.x3] for pt in lcfs]
+        lcfs_list = [lcfs[0].x1, lcfs[0].x3]
+        lcfs_rz = np.array(lcfs_list)
+        self.vint = {'ngrid': ngrid,
+                    'rpz_values': rpz_values,
+                    'xyz_values': xyz_values,
+                    'z_values': z_values,
+                    'rmaj_values': rmaj_values,
+                    'int_values': int_values,
+                    'psi_values': psi_values,
+                    'lcfs_rz':lcfs_rz,
+                    }
+    
     def plot_onaxis(self, b_angle_limit=9, save=False, noplot=False):
         # get B vector along beam axis
         # vmec_stp = vmec.service.toVMECCoordinates(self.eq_tag, 
@@ -283,32 +321,6 @@ class _Beam(object):
         plt.tight_layout()
         # return validports
         
-    def calc_vertical_plane_intensity(self):
-        # B vector along beamline in plasma
-        mrad_axis = np.linalg.norm(self.axis - self.source.reshape((3,1)), axis=0)
-        rlim = [mrad_axis.min()-0.2, mrad_axis.max()+0.05]
-        tlim = [-0.40,0.40]
-        # plot beam intensity in r,t plane at s=0
-        ngrid = 50
-        rgrid = np.linspace(rlim[0],rlim[1],num=ngrid)
-        tgrid = np.linspace(tlim[0],tlim[1],num=ngrid)
-        int_values = np.empty([ngrid,ngrid])
-        xyz_values = np.empty([3,ngrid,ngrid])
-        for ir,r in enumerate(rgrid):
-            for it,t in enumerate(tgrid):
-                xyz_values[:,ir,it] = self.source + r*self.r_hat + t*self.t_hat
-                int_values[ir,it] = self.point_intensity(t=t,r=r)
-        z_values = xyz_values[2,:,:]
-        rmaj_values = np.sqrt(xyz_values[0,:,:]**2 + xyz_values[1,:,:]**2)
-        rpz_values = self.xyz_to_rpz(xyz_values).reshape(3,-1)
-        return {'ngrid': ngrid,
-                'rpz_values': rpz_values,
-                'xyz_values': xyz_values,
-                'z_values': z_values,
-                'rmaj_values': rmaj_values,
-                'int_values': int_values,
-                }
-    
     def plot_vertical_plane(self, 
                             port='A21-lolo', 
                             eq_tag=None, 
@@ -317,18 +329,21 @@ class _Beam(object):
                             sp2=None):
         if eq_tag is not None:
             self.set_eq(eq_tag=eq_tag)
-        vint = self.calc_vertical_plane_intensity()
-        ngrid = vint['ngrid']
-        rpz_values = vint['rpz_values']
-        xyz_values = vint['xyz_values']
-        z_values = vint['z_values']
-        rmaj_values = vint['rmaj_values']
-        int_values = vint['int_values']
+        # vint = self.calc_vertical_plane_intensity()
+        ngrid = self.vint['ngrid']
+        # rpz_values = vint['rpz_values']
+        xyz_values = self.vint['xyz_values']
+        z_values = self.vint['z_values']
+        rmaj_values = self.vint['rmaj_values']
+        int_values = self.vint['int_values']
+        psi_values = self.vint['psi_values']
+        lcfs_rz = self.vint['lcfs_rz']
         intlevels = np.array([0.7,0.8,0.9]) * int_values.max()
-        vmec_stp = vmec.service.toVMECCoordinates(self.eq_tag, 
-                                                  Points3D(*rpz_values.tolist()),
-                                                  1e-3)
-        psi_values = np.array(vmec_stp.x1).reshape(ngrid,ngrid)
+        psi_levels=[0.2,0.4,0.6,0.8]
+        # vmec_stp = vmec.service.toVMECCoordinates(self.eq_tag, 
+        #                                           Points3D(*rpz_values.tolist()),
+        #                                           1e-3)
+        # psi_values = np.array(vmec_stp.x1).reshape(ngrid,ngrid)
         # plot dist. from port to r,t plane
         portcoord = self.ports[port]
         sightline = xyz_values - np.tile(portcoord.reshape(3,1,1), (1,ngrid,ngrid))
@@ -347,21 +362,27 @@ class _Beam(object):
         if sp1 and sp2:
             ax1 = plt.subplot(sp1)
         else:
-            plt.figure(figsize=[10.2,3.25])
+            plt.figure(figsize=[4.5*2,3.3])
             ax1 = plt.subplot(1,2,1)
         plt.contourf(rmaj_values, z_values, b_angle,
-                     levels=np.linspace(0,15,6),
+                     levels=np.linspace(0,10,6),
                      cmap=cm.viridis)
-        plt.clim(0,15)
+        plt.clim(0,10)
         plt.xlabel('R [m]')
         plt.ylabel('z [m]')
         plt.title(f'{title_base} | B-angle')
         plt.gca().set_aspect('equal')
         cb = plt.colorbar()
         cb.ax.set_ylabel('Field align. (deg)', rotation=-90, va='bottom')
-        plt.contour(rmaj_values, z_values, psi_values, colors='k')
+        plt.contour(rmaj_values, z_values, psi_values, 
+                    colors='k', levels=psi_levels)
         plt.contour(rmaj_values, z_values, int_values, 
-                    colors='k', levels=intlevels)
+                    colors='grey', levels=intlevels)
+        xlim = plt.gca().get_xlim()
+        ylim = plt.gca().get_ylim()
+        plt.plot(lcfs_rz[0], lcfs_rz[1], color='k')
+        plt.xlim(xlim)
+        plt.ylim(ylim)
         # plot doppler shift in r,t plane
         tiled_rhat = np.tile(self.r_hat.reshape(3,1,1), (1,ngrid,ngrid))
         vpar = self.vbeam * np.sum(sl_hat*tiled_rhat, axis=0)
@@ -380,9 +401,15 @@ class _Beam(object):
         plt.gca().set_aspect('equal')
         cb = plt.colorbar()
         cb.ax.set_ylabel('Doppler shift (nm)', rotation=-90, va='bottom')
-        plt.contour(rmaj_values, z_values, psi_values, colors='k')
+        plt.contour(rmaj_values, z_values, psi_values, 
+                    colors='k', levels=psi_levels)
         plt.contour(rmaj_values, z_values, int_values, 
-                    colors='k', levels=intlevels)
+                    colors='grey', levels=intlevels)
+        xlim = plt.gca().get_xlim()
+        ylim = plt.gca().get_ylim()
+        plt.plot(lcfs_rz[0], lcfs_rz[1], color='k')
+        plt.xlim(xlim)
+        plt.ylim(ylim)
         plt.annotate('{} @ {:.1f} keV'.format(self.species, self.voltage/1e3),
                      [0.03,0.92], xycoords='axes fraction')
         if not sp1 or not sp2:
@@ -971,11 +998,11 @@ class Sightline(object):
 
 if __name__=='__main__':
     plt.close('all')
-    p2 = HeatingBeam(pini=2)
+    p2 = HeatingBeam(pini=7, eq_tag='w7x_ref_29')
     # p2.plot_onaxis(save=True)
-    p2.plot_vertical_plane(port='A21-lolo', save=True)
-    p2.set_eq(eq_tag='w7x_ref_29')
-    p2.plot_vertical_plane(port='A21-lolo', save=True)
+    # p2.plot_vertical_plane(port='A21-lolo', save=True)
+    # p2.plot_vertical_plane(port='A21-hihi', save=False)
+    p2.plot_vertical_plane(port='W30', save=True)
     # s = Sightline(p2, port='A21-lolo', r_obs=6.03, z_obs=-0.16)
     # s = Sightline(p2, port='A21-lolo', r_obs=5.84, z_obs=-0.52)
     # s.plot_sightline(save=True)

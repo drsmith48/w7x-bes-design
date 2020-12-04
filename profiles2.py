@@ -412,17 +412,17 @@ class Profiles(object):
                                  mu=mu,
                                  ))
         rhoi = np.array([param.rho_i for param in params]) # rho-i in m
-        # rhos = np.array([param.rho_s for param in params])
-        legend_kw = {'loc':None, 
-                     'labelspacing':0.2, 
-                     'fontsize':'small', 
-                     }
+        rhos = np.array([param.rho_s for param in params]) # rho-s in m
+        # legend_kw = {'loc':None, 
+        #              'labelspacing':0.2, 
+        #              'fontsize':'small', 
+        #              }
         title = f'{self.shot} | {self.time:.2f} s | {self.desc}'
         # k values for k*rhoi= X
-        krhoi_values = [0.2,0.4,0.6,0.8]
-        k = np.matmul(1/rhoi.reshape(-1,1),
-                      np.array(krhoi_values).reshape(1,-1)) # k in 1/m
-        klabels = [f'k*rhoi = {kval}' for kval in krhoi_values]
+        # krhoi_values = [0.2,0.4,0.6,0.8]
+        # k = np.matmul(1/rhoi.reshape(-1,1),
+        #               np.array(krhoi_values).reshape(1,-1)) # k in 1/m
+        # klabels = [f'k*rhoi = {kval}' for kval in krhoi_values]
         for c in c2c:
             kmax = np.pi/c  # 1/cm
             print(f'C2C = {c:.02f} cm  -> kmax = {kmax:.02f} 1/cm')
@@ -435,41 +435,88 @@ class Profiles(object):
         Te_J = np.array([param.Te_J for param in params])
         gradpi_over_n = np.array(Ti_J * dprofiles['ne'] / profiles['ne']).reshape(-1,1)
         gradpe_over_n = np.array(Te_J * dprofiles['ne'] / profiles['ne']).reshape(-1,1)
-        omega_star_i = (k / pc.e / 2.6) * gradpi_over_n
-        omega_star_e = (k / pc.e / 2.6) * gradpe_over_n
-        plt.figure(figsize=(10,5.33))
-        for ifield,field in enumerate(self._fields):
-            plt.subplot(2,3,ifield+1)
-            plt.plot(x, profiles[field])
-            plt.ylabel(self._labels[ifield])
-            plt.xlabel('r/a')
-            plt.ylim(0,None)
-            plt.title(title)
-        plt.subplot(2,3,4)
-        plt.plot(x, omega_star_i/(2*np.pi)/1e3)
-        plt.legend(klabels,**legend_kw)
+        # omega_star_i = (k / pc.e / 2.6) * gradpi_over_n
+        # omega_star_e = (k / pc.e / 2.6) * gradpe_over_n
+        plt.figure(figsize=(6.6,5.4))
+        # ne profile
+        # plt.subplot(2,3,2)
+        # plt.plot(x, profiles['ne'])
+        # plt.ylabel(self._labels[0])
+        # plt.xlabel('r/a')
+        # plt.ylim(0,None)
+        # plt.title(title)
+        # ne, Te, Ti profiles
+        plt.subplot(2,2,1)
+        plt.plot(x, profiles['ti'], label='Ti')
+        plt.plot(x, profiles['te'], label='Te')
+        plt.plot(x, profiles['ne']/2, label='ne/2')
+        plt.ylabel('Te, Ti (keV), ne/2 (1e13/cm^3)')
         plt.xlabel('r/a')
-        plt.ylabel('omega_star_i (kHz)')
+        plt.ylim(0,None)
+        plt.legend()
         plt.title(title)
-        plt.subplot(2,3,5)
-        plt.plot(x, omega_star_e/(2*np.pi)/1e3)
-        plt.legend(klabels,**legend_kw)
+        # # k*rho-i
+        # plt.subplot(2,3,3)
+        # plt.plot(x, k/1e2)
+        # plt.xlabel('r/a')
+        # plt.ylabel('k (1/cm)')
+        # plt.ylim(0,4)
+        # for c in c2c:
+        #     plt.axhline(np.pi/c, c='k', ls=':')
+        #     plt.annotate(f'k_max with C2C={c:.1f} cm', (0,np.pi/c), 
+        #                  xytext=(1,3),
+        #                  textcoords='offset points')
+        # plt.title(title)
+        # plt.legend(klabels,**legend_kw)
+        # rhoi ,rhos profiles
+        plt.subplot(2,2,2)
+        plt.plot(x, rhoi*1e3, label='rho-i')
+        plt.plot(x, rhos*1e3, label='rho-s')
+        plt.legend()
+        plt.ylim([0,None])
         plt.xlabel('r/a')
-        plt.ylabel('omega_star_e (kHz)')
+        plt.ylabel('rho-i,s (mm)')
         plt.title(title)
-        plt.subplot(2,3,6)
-        plt.plot(x, k/1e2)
+        # omega_star_i
+        plt.subplot(2,2,3)
+        kmax = np.pi/c2c[0]*1e2  # 1/m
+        omega_star_i = (kmax / pc.e / 2.6) * gradpi_over_n
+        omega_star_e = (kmax / pc.e / 2.6) * gradpe_over_n
+        plt.plot(x, omega_star_i/(2*np.pi)/1e3,
+                 label='omega_star_i')
+        plt.plot(x, omega_star_e/(2*np.pi)/1e3,
+                 label='omega_star_e')
+        plt.annotate(f'{c2c[0]:.1f} cm grid spacing',
+                     (0.05,0.9), xycoords='axes fraction')
+        plt.legend(loc='lower right')
         plt.xlabel('r/a')
-        plt.ylabel('k (1/cm)')
-        plt.ylim(0,4)
-        for c in c2c:
-            plt.axhline(np.pi/c, c='k', ls=':')
-            plt.annotate(f'k_max with C2C={c:.1f} cm', (0,np.pi/c), 
-                         xytext=(1,3),
-                         textcoords='offset points')
+        plt.ylabel('omega_star (kHz)')
         plt.title(title)
-        plt.legend(klabels,**legend_kw)
+        # omega_star_e
+        # plt.subplot(2,3,5)
+        # plt.plot(x, omega_star_e/(2*np.pi)/1e3)
+        # plt.legend(klabels,**legend_kw)
+        # plt.xlabel('r/a')
+        # plt.ylabel('omega_star_e (kHz)')
+        # plt.title(title)
+        # max k*rhoi
+        plt.subplot(2,2,4)
+        for spacing,linestyle in zip(c2c, ['-','--']):
+            kmax = np.pi/spacing  # 1/cm
+            max_krhoi = kmax*rhoi*1e2
+            plt.plot(x, max_krhoi,
+                     label=f'{spacing:.1f} cm grid spacing',
+                     linestyle=linestyle)
+        plt.legend(loc='lower left')
+        plt.xlabel('r/a')
+        plt.ylabel('max k*rhoi')
+        plt.ylim(0,1)
+        plt.title(title)
         plt.tight_layout()
+        if save:
+            fname = Path('plots') / f'k-omega_{self.shot}_{self.time*1e3:.0f}ms.pdf'
+            print(f'Saving {fname.as_posix()}')
+            plt.savefig(fname.as_posix(), transparent=True)
             
             
 
@@ -477,7 +524,7 @@ class Profiles(object):
 if __name__=='__main__':
     plt.close('all')
     pro = Profiles()
-    pro.plot_profiles(save=True)
-    # pro.plot_profiles2(save=True)
+    # pro.plot_profiles(save=True)
+    pro.plot_profiles2(save=True)
     pro = Profiles(1)
-    pro.plot_profiles(save=True)
+    pro.plot_profiles2(save=True)

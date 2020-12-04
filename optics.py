@@ -8,6 +8,7 @@ Created on Fri May 22 07:56:39 2020
 
 from pathlib import Path
 import numpy as np
+from scipy import interpolate
 import matplotlib.pyplot as plt
 
 
@@ -92,25 +93,24 @@ class FiberImage(object):
         self.D = D
         
         
-def plot(save=False):
-    fiber_diameters = np.array([0.05,0.1,0.2,0.3,0.4,0.6,0.8,1.0,
-                                1.2,1.6,1.8,2.0])
+def plot(spot_distance=180.0, target_spotsize=1, save=False):
+    fiber_diameters = np.array([0.2,0.4,0.6,0.8,1.0,1.2,1.6])
 
     na_values = [0.333, 0.2]
-    lens_values = [6,8,10]
+    lens_values = [6,8]
     
-    nrows = len(lens_values)//2+1
-    plt.figure(figsize=[3.666*2, 3.25*nrows])
-    ax_etendue = plt.subplot(nrows,2,len(lens_values)+1)
+    plt.figure(figsize=[11, 3.25])
+    ax_etendue = plt.subplot(1,3,len(lens_values)+1)
 
     # NA scan
     for iplot, lens_diameter in enumerate(lens_values):
-        ax = plt.subplot(nrows,2,iplot+1)
+        ax = plt.subplot(1,3,iplot+1)
         for na in na_values:
             plt.sca(ax)
             images = [FiberImage(fiber_diameter=fiber_diameter,
                                  fiber_na=na,
-                                 lens_diameter=lens_diameter)
+                                 lens_diameter=lens_diameter,
+                                 spot_distance=spot_distance)
                       for fiber_diameter in fiber_diameters]
             spot_diameters = [image.spot_diameter for image in images]
             efl = images[0].efl
@@ -143,8 +143,24 @@ def plot(save=False):
                            labelspacing=1)
                 plt.xlabel('Fiber bundle diameter (mm)')
                 plt.ylabel('Etendue (mm**2-ster)')
+                plt.xlim([-0.08,None])
+            if na == na_values[0]:
+                print(f'Lens diameter = {lens_diameter:0.1f} cm and fiber NA = {na:.3f}')
+                spot_diameters = [fi.spot_diameter for fi in images]
+                eten = [fi.etendue for fi in images]
+                fd_interp = interpolate.interp1d(spot_diameters,
+                                                 fiber_diameters,
+                                                 assume_sorted=True)
+                eten_interp = interpolate.interp1d(fiber_diameters,
+                                                   eten,
+                                                   kind='quadratic',
+                                                   assume_sorted=True)
+                for spot in [1.,1.5]:
+                    fd = fd_interp(spot)
+                    eten = eten_interp(fd)
+                    print(f'  Spot size {spot:.1f} cm -> fiber diameter {fd:.2f} mm -> etendue {eten:.3f} mm^2-ster')
         plt.sca(ax)
-        plt.axhline(2, ls=':', c='k')
+        plt.axhline(target_spotsize, ls=':', c='k')
     plt.tight_layout()
     if save:
         fname = Path('plots') / 'optics-calculations.pdf'
@@ -153,7 +169,4 @@ def plot(save=False):
 
 if __name__=='__main__':
     plt.close('all')
-    # spotsize()
-    # plot2()
-    # a=FiberImage()
-    plot(save=True)
+    plot(spot_distance=230, save=False)

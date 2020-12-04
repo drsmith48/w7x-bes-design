@@ -6,34 +6,11 @@ Created on Tue Jul 14 09:45:07 2020
 @author: drsmith
 """
 
+from pathlib import Path
 import numpy as np
 import scipy.constants as pc
 import matplotlib.pyplot as plt
 
-
-apd_list = [
-    {'name':'Hamm S8550-2',
-     'qe':0.85,
-     # 'responsivity':0.48,
-     'junction_cap':9e-12,
-     'gain':50,
-     'noise_figure':0.2,
-     },
-    # {'name':'Excelitas C30739ECERH',
-    #  'dark_current':1.5e-9,
-    #  'responsivity':0.35,
-    #  'junction_cap':60e-12,
-    #  'gain':100,
-    #  'noise_current':0.3e-12,
-    #  },
-    # {'name':'Excelitas C30737EH-500-80',
-    #  'dark_current':0.1e-9,
-    #  'responsivity':0.33,
-    #  'junction_cap':2e-12,
-    #  'gain':100,
-    #  'noise_current':0.1e-12,
-    #  },
-    ]
 
 ppd_list = [
        {'name':'API PDB-C164',
@@ -61,11 +38,6 @@ ppd_list = [
         'junction_cap':12e-12,  # V_b = 10 V, T=20C
         'qe':0.71,
         },
-       # {'name':'Hamm S13956-1',
-       #  'dark_current':10e-9,  # V_b = 10 mV, T=20C
-       #  'junction_cap':60e-12,  # V_b = 0 V, T=20C
-       #  'responsivity':0.48,
-       #  },
        {'name':'Hamm S3805',
         'dark_current':0.1e-9,  # V_b = 10 mV, T=20C
         'junction_cap':15e-12,  # V_b = 0 V, T=20C
@@ -81,6 +53,15 @@ ppd_list = [
         'junction_cap':2.5e-12,  # V_b = 3 V, T=20C
         'responsivity':0.46,
         },
+    ]
+
+apd_list = [
+    {'name':'Hamm S8550-2',
+     'qe':0.85,
+     'junction_cap':9e-12,
+     'gain':50,
+     'noise_figure':0.2,
+     },
     ]
 
 
@@ -117,8 +98,6 @@ class _Diode(object):
         # sharp decrease with V_b; C_j ~ 1/sqrt(V_b)
         # C_j(10V) ~ C_j(0V)/5
         self.junction_cap_ref = junction_cap
-        # shunt resistence at V_b=10mV [MOhm]
-        # self.shunt_res_ref = shunt_res
         
     def photocurrent(self, p_inc=p_ref):
         return self.gain * self.responsivity * p_inc
@@ -129,12 +108,7 @@ class _Diode(object):
     def junction_cap(self, vb=vb_ref):
         return self.junction_cap_ref * np.sqrt(vb_ref)/np.sqrt(vb)
     
-    # def shunt_res(self, t=t_ref):
-    #     return self.shunt_res_ref * 2**((t-t_ref)/6)
-    
     def sigmasq_thermal(self, t=t_ref, rload=100e6):
-        # shunt_res = self.shunt_res(t)
-        # r_eff = rload*shunt_res / (rload+shunt_res)
         return 4*pc.k*(t+273)/rload * bandwidth
     
     def sigmasq_shot(self, p_inc=p_ref, t=t_ref):
@@ -171,23 +145,27 @@ class ApdDiode(_Diode):
         self.name = self.name + ' (APD)'
         self.gain = gain
         if noise_factor:
+            # noise factor specified
             self.noise_factor = noise_factor
         elif noise_figure:
+            # calc noise factor from noise figure
             self.noise_factor = 10**(noise_figure/10)
         elif noise_current:
-            self.noise_factor = 1
+            # calc noise factor from noise current
             sigma_sq_ideal = self.sigmasq_shot(p_inc=0)/bandwidth
             self.noise_factor = noise_current**2 / sigma_sq_ideal
         else:
             raise ValueError
+        # assert noise factor > 1
+        assert(self.noise_factor>1)
     
 
-def plot_diodes():
+def plot_diodes(save=False):
     plt.close('all')
     diodes = []
     diodes.extend([PinDiode(**ppd_kw) for ppd_kw in ppd_list])
     diodes.extend([ApdDiode(**apd_kw) for apd_kw in apd_list])
-    prange = np.array([0.1,0.3,1,3,10,30,100])*1e-9
+    prange = np.array([1,3,10,30,100])*1e-9
     vbrange = np.arange(1,30,1)
     trange = np.arange(-40,26,5)
     rload = 10e6
@@ -213,13 +191,6 @@ def plot_diodes():
     plt.xlabel('Temp. (C)')
     plt.ylabel('Dark current (nA)')
     plt.title('I_dark vs. temp.')
-    # # shunt resistance
-    # plt.subplot(3,3,4)
-    # for d in diodes:
-    #     plt.semilogy(trange, d.shunt_res(t=trange)/1e6, label=d.name)
-    # plt.xlabel('Temp. (C)')
-    # plt.ylabel('Shunt resistance (MOhm)')
-    # plt.title('Shunt res. vs. temp.')
     # thermal noise
     plt.subplot(3,3,4)
     for d in diodes:
@@ -273,8 +244,13 @@ def plot_diodes():
     for ax in plt.gcf().axes[3:4]:
         ax.legend(fontsize='small', labelspacing=0.2, handlelength=1)
     plt.tight_layout()
+    if save:
+        fname = Path('diodes.pdf')
+        print(f'Saving {fname.as_posix()}')
+        plt.savefig(fname.as_posix(), transparent=True)
     return diodes
     
     
 if __name__=='__main__':
-    diodes = plot_diodes()
+    plt.close('all')
+    diodes = plot_diodes(save=False)

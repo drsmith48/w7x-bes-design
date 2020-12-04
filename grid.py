@@ -26,78 +26,105 @@ class Grid(object):
                  c2c_normal=1.5,  # radial-like center-to-center distance (cm)
                  c2c_binormal=None,  # poloidal-like center-to-center distance (cm)
                  no_saved_data=False, # force calculation of sightline grid data
+                 load_file=None,
                  ):
-        if not beam:
-            beam = beams.HeatingBeam(pini=2, eq_tag=eq_tag)
-        assert(isinstance(beam, beams._Beam))
-        if eq_tag is not None and eq_tag!=beam.eq_tag:
-            beam.set_eq(eq_tag=eq_tag)
-        self.eq_tag = beam.eq_tag
-        self.beam = beam
-        self.port = port
-        self.grid_shape = grid_shape
-        self.r_obs = r_obs
-        self.z_obs = z_obs
-        if c2c_binormal is None:
-            c2c_binormal = c2c_normal
-        self.identifier = '{:d}{:d}_c2c{:.0f}_P{:d}_{}_R{:.0f}_Z{:.0f}_{}'.format(
-            self.grid_shape[0],
-            self.grid_shape[1],
-            c2c_normal*10,
-            self.beam.injector,
-            self.port[0:3],
-            np.round(self.r_obs*1e2), 
-            np.round(self.z_obs*1e2),
-            self.eq_tag)
-        pickle_file = Path('data') / f'grid_{self.identifier}.pickle'
+        if load_file:
+            # grid file specified
+            load_file = Path(load_file)
+            assert(load_file.exists())
+            force_saved_data = True
+            identifier='tmp'
+        else:
+            # grid file not specified
+            assert(isinstance(beam, beams._Beam))
+            if eq_tag is not None and eq_tag!=beam.eq_tag:
+                beam.set_eq(eq_tag=eq_tag)
+            eq_tag = beam.eq_tag
+            if c2c_binormal is None:
+                c2c_binormal = c2c_normal
+            force_saved_data = False
+            identifier = '{:d}{:d}_c2c{:.0f}_P{:d}_{}_R{:.0f}_Z{:.0f}_{}'.format(
+                grid_shape[0],
+                grid_shape[1],
+                c2c_normal*10,
+                beam.injector,
+                port[0:3],
+                np.round(r_obs*1e2), 
+                np.round(z_obs*1e2),
+                beam.eq_tag)
+        # set data file
+        if load_file:
+            identifier_file = load_file
+        else:
+            identifier_file = Path('data') / f'grid_{identifier}.pickle'
+        # try to open data file
         try:
-            with pickle_file.open('rb') as f:
+            with identifier_file.open('rb') as f:
                 saved_data = pickle.load(f)
-                print(f'Loaded {pickle_file.as_posix()}')
+                print(f'Loaded {identifier_file.as_posix()}')
         except:
-            print(f'Invalid file {pickle_file.as_posix()}')
+            print(f'Invalid file {identifier_file.as_posix()}')
             saved_data = {}
-        pickle_data = {'beam_name':beam.name, 
-                       'eq_tag':self.eq_tag,
-                       'port':port, 
-                       'grid_shape_0':grid_shape[0], 
-                       'grid_shape_1':grid_shape[1], 
-                       'r_obs':r_obs, 
-                       'z_obs':z_obs,
-                       'c2c_normal':c2c_normal,
-                       'c2c_binormal':c2c_binormal,
-                       'sightlines':None,
-                       'central_ray':None}
-        # test saved sightline grid
+        # assemble grid data from specified file, archived file, or inputs
         valid_saved_data = True
-        for key in pickle_data.keys():
-            if key in ['sightlines','central_ray']:
-                continue
-            if pickle_data[key] != saved_data.get(key):
+        if force_saved_data:
+            grid_data = saved_data.copy()
+            pini = eval(grid_data['beam_name'][-1])
+            eq_tag = grid_data['eq_tag']
+            beam = beams.HeatingBeam(pini=pini, eq_tag=eq_tag)
+            port = grid_data['port']
+            grid_shape = [grid_data['grid_shape_0'],
+                          grid_data['grid_shape_0']]
+            r_obs = grid_data['r_obs']
+            z_obs = grid_data['z_obs']
+            c2c_normal = grid_data['c2c_normal']
+            c2c_binormal = grid_data['c2c_binormal']
+        else:
+            # grid data from inputs
+            grid_data = {'beam_name':beam.name, 
+                           'eq_tag':eq_tag,
+                           'port':port, 
+                           'grid_shape_0':grid_shape[0], 
+                           'grid_shape_1':grid_shape[1], 
+                           'r_obs':r_obs, 
+                           'z_obs':z_obs,
+                           'c2c_normal':c2c_normal,
+                           'c2c_binormal':c2c_binormal,
+                           'sightlines':None,
+                           'central_ray':None}
+            # test saved sightline grid
+            for key in grid_data.keys():
+                if key in ['sightlines','central_ray']:
+                    continue
+                if grid_data[key] != saved_data.get(key):
+                    valid_saved_data = False
+                    break
+            if no_saved_data:
                 valid_saved_data = False
-                break
-        if no_saved_data:
-            valid_saved_data = False
-        self.deln_array = c2c_normal/1e2 * np.arange(-(grid_shape[0]-1)/2,
-                                                (grid_shape[0]-1)/2*(1+1e-4))
-        self.delbi_array = c2c_binormal/1e2 * np.arange((grid_shape[1]-1)/2,
-                                                   -(grid_shape[1]-1)/2*(1+1e-4), -1)
-        if valid_saved_data:
+        if valid_saved_data or force_saved_data:
             print('Using saved sightline grid data')
             self.sightlines = saved_data['sightlines']
             self.central_ray = saved_data['central_ray']
+            self.deln_array = c2c_normal/1e2 * np.arange(-(grid_shape[0]-1)/2,
+                                                (grid_shape[0]-1)/2*(1+1e-4))
+            self.delbi_array = c2c_binormal/1e2 * np.arange((grid_shape[1]-1)/2,
+                                               -(grid_shape[1]-1)/2*(1+1e-4), -1)
         else:
             print('Calculating sightline grid data')
             self.central_ray = beams.Sightline(beam=beam, 
                                                port=port,
                                                r_obs=r_obs,
                                                z_obs=z_obs,
-                                               eq_tag=self.eq_tag)
-            pickle_data['central_ray'] = self.central_ray
+                                               eq_tag=eq_tag)
+            grid_data['central_ray'] = self.central_ray
             imax = self.central_ray.imax
             xyz = self.central_ray.xyz[:,imax]
             nhat = self.central_ray.nhat[:,imax]
             bihat = self.central_ray.bihat[:,imax]
+            self.deln_array = c2c_normal/1e2 * np.arange(-(grid_shape[0]-1)/2,
+                                                (grid_shape[0]-1)/2*(1+1e-4))
+            self.delbi_array = c2c_binormal/1e2 * np.arange((grid_shape[1]-1)/2,
+                                               -(grid_shape[1]-1)/2*(1+1e-4), -1)
             rgrid = np.empty(grid_shape)
             zgrid = np.empty(grid_shape)
             futures = np.empty(grid_shape, dtype=object)
@@ -125,25 +152,20 @@ class Grid(object):
             for inorm in np.arange(grid_shape[0]):
                 for ibi in np.arange(grid_shape[1]):
                     self.sightlines[inorm,ibi] = futures[inorm,ibi].result()
-            pickle_data['sightlines'] = self.sightlines
-            with pickle_file.open('wb') as f:
-                print(f'Saving {pickle_file.as_posix()}')
-                pickle.dump(pickle_data, f)
-        # print('Center ray R, Z: {:.2f} {:.2f} cm'.format(self.central_ray.r_avg*1e2,
-        #                                                  self.central_ray.z_avg*1e2))
-        # for ir in [0,grid_shape[0]-1]:
-        #     for iz in [0,grid_shape[1]-1]:
-        #         print('Corner ray R, Z: {:.2f} {:.2f} cm'.format(self.sightlines[ir,iz].r_avg*1e2,
-        #                                                          self.sightlines[ir,iz].z_avg*1e2))
-        # for loc,rhoi in zip(['Core','Edge'], [0.4,0.1]):
-        #     print('{} @ rho_i = {:.1f} mm'.format(loc, rhoi*10))
-        #     krhoi = (1/2) * 2*np.pi / (c2c_normal*np.array([grid_shape[0],1])) * rhoi
-        #     print('  k_rad * rho_i min/max = {:.2f} {:.2f}'.format(*krhoi.tolist()))
-        #     krhoi = (1/2) * 2*np.pi / (c2c_binormal*np.array([grid_shape[1],1])) * rhoi
-        #     print('  k_pol * rho_i min/max = {:.2f} {:.2f}'.format(*krhoi.tolist()))
+            grid_data['sightlines'] = self.sightlines
+            with identifier_file.open('wb') as f:
+                print(f'Saving {identifier_file.as_posix()}')
+                pickle.dump(grid_data, f)
+        self.eq_tag = beam.eq_tag
+        self.beam = beam
+        self.port = port
+        self.grid_shape = grid_shape
+        self.r_obs = r_obs
+        self.z_obs = z_obs
+        self.identifier = identifier
     
     def plot(self, save=False):
-        plt.figure(figsize=(14.2,7.2))
+        plt.figure(figsize=(4.5*3,3.3*2))
         ax1, ax2 = self.beam.plot_vertical_plane(port=self.port, sp1=234, sp2=235)
         for inorm in np.arange(self.grid_shape[0]):
             for ibi in np.arange(self.grid_shape[1]):
@@ -154,6 +176,10 @@ class Grid(object):
         ax1 = plt.subplot(231)
         ax2 = plt.subplot(233)
         ax3 = plt.subplot(232)
+        max_bi_excursion = 0
+        max_rad_excursion = 0
+        max_psi = 0
+        min_psi = 1
         for inorm in np.arange(self.grid_shape[0]):
             for ibi in np.arange(self.grid_shape[1]):
                 sl = self.sightlines[inorm,ibi]
@@ -175,6 +201,12 @@ class Grid(object):
                 plt.plot(sl.norm_half_excursion*1e2*2, 
                          sl.binorm_half_excursion*1e2*2, 
                          'x')
+        max_rad_excursion = np.max([sl.norm_half_excursion*1e2*2 for sl in self.sightlines.flat])
+        max_bi_excursion = np.max([sl.binorm_half_excursion*1e2*2 for sl in self.sightlines.flat])
+        print(f'Max rad/binorm excursion (cm): {max_rad_excursion:.2f} {max_bi_excursion:.2f}')
+        max_psi = np.max([sl.psinorm[sl.imax] for sl in self.sightlines.flat])
+        min_psi = np.min([sl.psinorm[sl.imax] for sl in self.sightlines.flat])
+        print(f'Min/max psinorm: {min_psi:.2f} {max_psi:.2f}')
         plt.sca(ax1)
         plt.xlim(-8,8)
         plt.ylim(-8,8)
@@ -196,8 +228,8 @@ class Grid(object):
         plt.xlim(0,3)
         plt.ylim(0,3)
         plt.title('Beam-weighted ray localization')
-        plt.xlabel('Radial localization (cm)')
-        plt.ylabel('Binormal localization (cm)')
+        plt.xlabel('Radial excursion (cm)')
+        plt.ylabel('Binormal excursion (cm)')
         plt.legend()
         plt.tight_layout()
         if save:
@@ -242,10 +274,12 @@ if __name__=='__main__':
     #             c2c_normal=1.5,
     #             eq_tag = 'w7x_ref_29')
     # grid.plot(save=True)
-    grid = Grid(beam=beams.HeatingBeam(pini=7),
-                port='W30',
-                r_obs=5.99, 
-                z_obs=0.15,
-                c2c_normal=1,
-                eq_tag='w7x_ref_29')
-    grid.plot(save=True)
+    # grid = Grid(beam=beams.HeatingBeam(pini=7),
+    #             port='W30',
+    #             r_obs=5.99, 
+    #             z_obs=0.15,
+    #             c2c_normal=1,
+    #             eq_tag='w7x_ref_29')
+    # grid.plot(save=True)
+    grid2 = Grid(load_file='data/grid_88_c2c10_P7_W30_R596_Z22_w7x_ref_29.pickle')
+    grid2.plot(save=True)
