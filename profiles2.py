@@ -406,6 +406,7 @@ class Profiles(object):
         print(f'Using atomic mass = {mu} AMU for rho-i')
         params = []
         for ix in np.arange(x.size):
+            # profiles['ti'][ix] = np.min([profiles['ti'][ix],profiles['te'][ix]])
             params.append(Params(ne=profiles['ne'][ix]*1e13,
                                  Te=profiles['te'][ix],
                                  Ti=profiles['ti'][ix],
@@ -426,10 +427,10 @@ class Profiles(object):
         for c in c2c:
             kmax = np.pi/c  # 1/cm
             print(f'C2C = {c:.02f} cm  -> kmax = {kmax:.02f} 1/cm')
-            for rova in [0.5,0.7,0.9]:
+            for rova in [0.55,0.75,0.95]:
                 xind = np.argmin(np.abs(x-rova))
                 max_krhoi = kmax * rhoi[xind]*1e2
-                print(f'  max(k*rhoi) = {max_krhoi:.02f} at r/a = {rova:.01f}')
+                print(f'  max(k*rhoi) = {max_krhoi:.02f} at r/a = {rova:.02f}')
         # omega-star
         Ti_J = np.array([param.Ti_J for param in params])
         Te_J = np.array([param.Te_J for param in params])

@@ -22,7 +22,7 @@ def calc_signal(emission_radiance=1e17,  # photons/m^2/ster
     print(f'Spot diameter = {spot_diameter:.2f} cm')
     print(f'Lens-spot distance = {distance:.1f} cm')
     print(f'Lens diameter = {aperture:.1f} cm')
-    print(f'Emission radiance = {emission_radiance:.2g} ph/m^2/ster')
+    print(f'Emission radiance = {emission_radiance:.2g} ph/s/m^2/ster')
     
     fiber_area = np.pi * (fiber_diameter/2)**2  # mm^2
     fiber_etendue = np.pi * fiber_area * fiber_NA**2  # mm^2-ster
@@ -37,7 +37,7 @@ def calc_signal(emission_radiance=1e17,  # photons/m^2/ster
     # emitted flux
     photon_wavelength = 656e-9  # wavelength (m)
     photon_energy = pc.h * pc.c / photon_wavelength  # energy per photon (J)
-    emission_power = emission_radiance * photon_energy * (emitter_etendue / 1e6) * 1e9  # nW
+    emission_power = emission_radiance * photon_energy * (fiber_etendue / 1e6) * 1e9  # nW
     print(f'Emission power = {emission_power:.1f} nW')
     
     # assume transmission loss
@@ -59,9 +59,10 @@ def calc_signal(emission_radiance=1e17,  # photons/m^2/ster
     
 
 if __name__=='__main__':
-    calc_signal(emission_radiance=0.5e18,  # photons/m^2/ster
-                fiber_diameter=0.51,  # mm
-                spot_diameter=1.0,  # cm
+    calc_signal(emission_radiance=0.7e18,  # photons/m^2/ster
+                fiber_diameter=0.8,  # mm
+                fiber_NA=0.25, 
+                spot_diameter=1.2,  # cm
                 distance=230,  # cm
                 aperture=8,  # cm
                 )

@@ -109,8 +109,10 @@ class _Beam(object):
             raise ValueError
         self.wavelength = 656.19
         self.voltage = bvoltage
+        print(f'{self.species} injection at {self.voltage/1e3:.1f} keV')
         beam_species_mass = self.atomic_weight * constants.m_u
         self.vbeam = np.sqrt(2 * constants.e * self.voltage / beam_species_mass)
+        print(f'Full-energy beam velocity = {self.vbeam:.3g} m/s')
         if not vmec or not Points3D:
             raise ValueError
         self.eq_tag = None
@@ -386,6 +388,13 @@ class _Beam(object):
         # plot doppler shift in r,t plane
         tiled_rhat = np.tile(self.r_hat.reshape(3,1,1), (1,ngrid,ngrid))
         vpar = self.vbeam * np.sum(sl_hat*tiled_rhat, axis=0)
+        vperp  = np.sqrt(self.vbeam**2 - vpar**2)
+        # print(f'Avg full-energy para. velocity = {vpar.mean():.3g} m/s')
+        print(f'Avg full-energy perp. velocity = {vperp.mean():.3g} m/s')
+        sl_beam_offnorm = np.arctan2(np.abs(vpar.mean()), vperp.mean())
+        print(f'SL/beam off-normal angle = {sl_beam_offnorm*180/np.pi:.2f} deg')
+        lifetime_travel = vperp.mean()*10e-9
+        print(f'Excited state lifetime travel (vacuum) = {lifetime_travel*1e2:.2f} cm')
         dshift_values = self.wavelength * vpar / constants.c
         if sp1 and sp2:
             ax2 = plt.subplot(sp2)

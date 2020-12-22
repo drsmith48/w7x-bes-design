@@ -93,11 +93,11 @@ class FiberImage(object):
         self.D = D
         
         
-def plot(spot_distance=180.0, target_spotsize=1, save=False):
-    fiber_diameters = np.array([0.2,0.4,0.6,0.8,1.0,1.2,1.6])
+def plot(spot_distance=180.0, target_spotsize=1.2, save=False):
+    fiber_diameters = np.array([0.4,0.6,0.8,1.0])
 
-    na_values = [0.333, 0.2]
-    lens_values = [6,8]
+    na_values = [0.37, 0.25]
+    lens_values = [8]
     
     plt.figure(figsize=[11, 3.25])
     ax_etendue = plt.subplot(1,3,len(lens_values)+1)
@@ -114,27 +114,44 @@ def plot(spot_distance=180.0, target_spotsize=1, save=False):
                       for fiber_diameter in fiber_diameters]
             spot_diameters = [image.spot_diameter for image in images]
             efl = images[0].efl
+            demag = 10*spot_diameters[0]/fiber_diameters[0]
+            label = f'Fiber NA = {na:.2f}\nEFL = {efl:.1f} cm\nDemag = {demag:.1f}'
             plt.plot(fiber_diameters, 
                      spot_diameters, 
                      marker='x', 
-                     label='Fiber NA = {:.2g}\nEFL={:.2g} cm'.format(na,efl))
+                     label=label)
             plt.title('Aperture diam. = {:.2g} cm'.format(lens_diameter))
             plt.legend(fontsize='small',
                        labelspacing=1)
             plt.xlabel('Fiber bundle diameter (mm)')
             plt.ylabel('Spot diameter (cm)')
-            for mag in [10,20]:
-                plt.plot([0,fiber_diameters.max()], 
-                         [0,mag*fiber_diameters.max()/10], 
-                         linestyle='--', 
-                         color='k', 
-                         linewidth=0.4)
-                plt.annotate('1/M={:d}'.format(mag), 
-                             [fiber_diameters.max(),mag*fiber_diameters.max()/10], 
-                             ha='right')
+            # for mag in [10,20]:
+            #     plt.plot([0,fiber_diameters.max()], 
+            #              [0,mag*fiber_diameters.max()/10], 
+            #              linestyle='--', 
+            #              color='k', 
+            #              linewidth=0.4)
+            #     plt.annotate('1/M={:d}'.format(mag), 
+            #                  [fiber_diameters.max(),mag*fiber_diameters.max()/10], 
+            #                  ha='right')
+            print(f'Lens diameter = {lens_diameter:.1f} cm and fiber NA = {na:.2f}')
+            spot_diameters = [image.spot_diameter for image in images]
+            etendue = [image.etendue for image in images]
+            fd_interp = interpolate.interp1d(spot_diameters,
+                                             fiber_diameters,
+                                             assume_sorted=True)
+            eten_interp = interpolate.interp1d(fiber_diameters,
+                                               etendue,
+                                               kind='quadratic',
+                                               assume_sorted=True)
+            target_fiber_diam = fd_interp(target_spotsize)
+            target_etendue = eten_interp(target_fiber_diam)
+            print(f'  Spot size {target_spotsize:.1f} cm -> fiber diameter {target_fiber_diam:.2f} mm -> etendue {target_etendue:.3f} mm^2-ster')
+            if na==na_values[0]:
+                plt.axhline(target_spotsize, ls=':', c='k')
+            plt.axvline(target_fiber_diam, ls=':', c='k')
             if iplot==0:
                 plt.sca(ax_etendue)
-                etendue = [image.etendue for image in images]
                 plt.plot(fiber_diameters,
                          etendue,
                          marker='x',
@@ -143,30 +160,37 @@ def plot(spot_distance=180.0, target_spotsize=1, save=False):
                            labelspacing=1)
                 plt.xlabel('Fiber bundle diameter (mm)')
                 plt.ylabel('Etendue (mm**2-ster)')
-                plt.xlim([-0.08,None])
-            if na == na_values[0]:
-                print(f'Lens diameter = {lens_diameter:0.1f} cm and fiber NA = {na:.3f}')
-                spot_diameters = [fi.spot_diameter for fi in images]
-                eten = [fi.etendue for fi in images]
-                fd_interp = interpolate.interp1d(spot_diameters,
-                                                 fiber_diameters,
-                                                 assume_sorted=True)
-                eten_interp = interpolate.interp1d(fiber_diameters,
-                                                   eten,
-                                                   kind='quadratic',
-                                                   assume_sorted=True)
-                for spot in [1.,1.5]:
-                    fd = fd_interp(spot)
-                    eten = eten_interp(fd)
-                    print(f'  Spot size {spot:.1f} cm -> fiber diameter {fd:.2f} mm -> etendue {eten:.3f} mm^2-ster')
-        plt.sca(ax)
-        plt.axhline(target_spotsize, ls=':', c='k')
+                # plt.xlim([-0.08,None])
+                plt.title('Optical throughput')
+                plt.axvline(target_fiber_diam, ls=':', c='k')
+                if na==na_values[0]:
+                    plt.axhline(target_etendue, ls=':', c='k')
     plt.tight_layout()
     if save:
         fname = Path('plots') / 'optics-calculations.pdf'
         plt.savefig(fname.as_posix(), transparent=True)
     
 
+def calc_etendue(nfiber=1, na=0.25, fnum=None, diam=1.0):
+    print(f'Fiber count = {nfiber}')
+    print(f'Fiber diam = {diam:.2f} mm')
+    if fnum:
+        print('Using f/#')
+        na = 1./(2*fnum)
+        print(f'f/{fnum:.1f}  (NA = {na:.2f})')
+    else:
+        print('Using NA')
+        fnum = 1./(2*na)
+        print(f'NA = {na:.2f}  (f/{fnum:.1f})')
+    etendue = nfiber * (np.pi * diam * na)**2 / 4
+    print(f'etendue = {etendue:.3f} mm2-ster')
+
 if __name__=='__main__':
     plt.close('all')
-    plot(spot_distance=230, save=False)
+    plot(spot_distance=230, 
+         target_spotsize=1,
+         save=False)
+    calc_etendue(nfiber=4, fnum=2, diam=1.0)
+    calc_etendue(nfiber=11, fnum=2, diam=1.0)
+    calc_etendue(nfiber=9, fnum=1.5, diam=1.0)
+    calc_etendue(nfiber=1, na=0.25, diam=0.8)
