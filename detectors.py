@@ -32,7 +32,7 @@ class _Diode(object):
                  darkcurrent_surface_ref=0,  # dark (leakage) surface current for APD [A]
                  junction_cap_ref=10e-15,  # diode junction cap. [F]
                  vb_ref=10,  # reference reverse bias [V]
-                 r_shunt=500e6,  # shunt resistance [Ohms]
+                 r_shunt=250e6,  # shunt resistance [Ohms]
                  ):
         assert(qe>0 or responsivity>0)
         self.name = name
@@ -61,7 +61,7 @@ class _Diode(object):
         
     def photocurrent(self, p_inc=p_ref):
         # p_inc in nW
-        photocurrent = self.gain * self.responsivity * p_inc * 1e-9
+        photocurrent = self.gain * self.responsivity * p_inc * 1e-9  # A
         return photocurrent
     
     def junction_cap(self, vb=None, ideal=False):
@@ -74,11 +74,11 @@ class _Diode(object):
         return junction_cap
     
     def photocurrent_shot_noise_CNPD(self, p_inc=p_ref, ideal=False):
-        photocurrent = self.photocurrent(p_inc=p_inc)
+        photocurrent = self.photocurrent(p_inc=p_inc)/self.gain
         noise_factor = self.noise_factor
         if ideal:
             noise_factor = 1
-        shot_noise = 2*pc.e * photocurrent * self.gain**2 * noise_factor 
+        shot_noise = 2*pc.e * photocurrent * self.gain**2 * noise_factor  # A^2/Hz
         return shot_noise
 
     def dark_current_shot_noise_CNPD(self, t=t_ref, ideal=False):
@@ -93,7 +93,7 @@ class _Diode(object):
             darkcurrent_surface *= 0
             noise_factor = 1
         shot_noise = 2*pc.e * ( darkcurrent * self.gain**2 * noise_factor + \
-            darkcurrent_surface )
+            darkcurrent_surface )  # A^2/Hz
         return shot_noise
 
     def shunt_noise_CNPD(self, t=t_ref, ideal=False):
@@ -150,15 +150,12 @@ class TIA(object):
     f_ref = np.logspace(1e3, 1e6)
 
     def __init__(self,
-            diode=None,
             r_feedback=100e6,  # reference feedback resistor [Ohms]
             jfet_enoise=0.8e-9,  # reference JFET e-nosie [V/root(Hz)], typ. 1 nV/rt(Hz)
             jfet_gatecurrent=1e-9,  # reference JFET gate current [A], typ. 10 mA
-            jfet_input_cap=10e-15,  # reference JFET input cap. [F]
-            stray_cap=4e-15,   # PCB stray capacitance [F]
+            jfet_input_cap=10e-12,  # reference JFET input cap. [F]
+            stray_cap=4e-12,   # PCB stray capacitance [F]
             ):
-        assert(diode and isinstance(diode, _Diode))
-        self.diode = diode
         self.r_feedback = r_feedback
         self.jfet_enoise = jfet_enoise
         self.jfet_gatecurrent = jfet_gatecurrent
@@ -173,18 +170,13 @@ class TIA(object):
             feedback_noise *= 0
         return feedback_noise
 
-    def gate_noise_CNPD(self, jfet_gatecurrent=None, ideal=False):
-        if not jfet_gatecurrent:
-            jfet_gatecurrent = self.jfet_gatecurrent
-        gate_noise = 2*pc.e * jfet_gatecurrent
+    def gate_noise_CNPD(self, ideal=False):
+        gate_noise = 2*pc.e * self.jfet_gatecurrent
         if ideal:
             gate_noise *= 0
         return gate_noise
 
-    def enc_noise_CNPD(self, f=f_ref, diode_junction_cap=0, vb=None, ideal=False):
-        if vb:
-            print('Using V_b to calculate diode junction cap.')
-            diode_junction_cap = self.diode.junction_cap(vb=vb, ideal=ideal)
+    def enc_noise_CNPD(self, f=f_ref, diode_junction_cap=0, ideal=False):
         total_cap = diode_junction_cap + self.jfet_input_cap + self.stray_cap
         enc_noise = ( 2*np.pi * self.jfet_enoise * total_cap * f ) ** 2.0
         if ideal:
