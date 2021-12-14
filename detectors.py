@@ -55,9 +55,11 @@ class _Diode(object):
         print(self.name)
         print(f'  QE = {self.qe*1e2:.1f} %')
         print(f'  Resp. = {self.responsivity:.2f} A/W')
-        print(f'  Dark current (total or vol.) = {self.darkcurrent_ref*1e9:.3f} nA')
+        print(f'  Dark current (total or vol.) = {self.darkcurrent_ref*1e9:.1f} nA')
         if self.darkcurrent_surface_ref:
-            print(f'  Dark current (surf.) = {self.darkcurrent_surface_ref*1e9:.3f} nA')
+            print(f'  Dark current (surf.) = {self.darkcurrent_surface_ref*1e9:.1f} nA')
+        print(f'  Junction cap = {self.junction_cap_ref*1e12:.1f} pF')
+        print(f'  Shunt res. = {self.r_shunt/1e6:.0f} MOhms')
         
     def photocurrent(self, p_inc=p_ref):
         # p_inc in nW
@@ -115,14 +117,16 @@ class ApdDiode(_Diode):
     
     def __init__(self, 
                  gain=50, 
-                 noise_factor=1.05,
+                 noise_factor=0,
                  noise_figure=0,
                  noise_current=0, 
+                 noise_index=0,
                  *args, **kwargs):
         super().__init__(*args, **kwargs)
         assert(gain>=1)
-        assert(noise_factor>0 or noise_figure>0 or noise_current>0)
+        assert(noise_factor>0 or noise_figure>0 or noise_current>0 or noise_index>0)
         self.gain = gain
+        print(f'  Gain = {self.gain:.0f}')
         if noise_factor:
             # noise factor specified
             self.noise_factor = noise_factor
@@ -135,6 +139,10 @@ class ApdDiode(_Diode):
             # calc noise factor from noise current
             sigma_sq_ideal = self.shot_noise_CNPD(p_inc=0)/self.bw_ref
             self.noise_factor = noise_current**2 / sigma_sq_ideal
+        elif noise_index:
+            # noise factor from noise index
+            print(f'  Noise index = {noise_index:.3g}')
+            self.noise_factor = self.gain ** noise_index
         assert(self.noise_factor>1)
         print(f'  Noise factor = {self.noise_factor:.3f}')
 
