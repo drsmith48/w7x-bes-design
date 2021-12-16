@@ -8,6 +8,8 @@ import scipy.constants as pc
 
 # All inputs and outputs are in SI units:  W, A, V, F, Ohms, Hz, A^2/Hz, etc.
 # All noise terms are current noise power density (CNPD) with units A^2/Hz
+# For diodes, noise terms are output CNPD
+# For TIA, noise terms are input-referenced CNPD
 
 
 class PinDiode(object):
