@@ -178,3 +178,41 @@ class TIA(object):
         if ideal:
             enc_noise *= 0
         return enc_noise
+
+
+diodes = {
+    'API_C164_PIN' : PinDiode(
+        name='AP PDB-C164 disc. PIN',
+        responsivity=0.43,  # A/W @ 650 nm
+        darkcurrent_ref=1e-9,  # typ 1 nA, max 10 nA @ T=20C
+        junction_cap_ref=7e-12,  # typ 7 pF @ Vr=10V
+        vb_ref=10,  # reference bias voltage for junction cap.
+        r_shunt=500e6,  # shunt resistance
+    ),
+    'Hama_S13620_PIN' : PinDiode(
+        name='Hama. S13620 8x8 PIN',
+        responsivity=0.49,  # A/W @ 650 nm
+        darkcurrent_ref=0.3e-9,  # typ 10 pA, max 300 pA @ Vr=10mV, T=20C
+        junction_cap_ref=15e-12,  # typ 15 pF @ Vr=8.6V
+        vb_ref=8.6,
+    ),
+    'AP_SD197_APD' : ApdDiode(
+        name='AP SD197 disc. APD',
+        qe=0.76,  # QE @ 650 nm
+        gain=300,  # gain @ Vr=330 V
+        darkcurrent_ref=6e-9,  # typ 1 nA, max 10 nA @ Vr=330V, M=50
+        junction_cap_ref=25e-12,  # typ 9 pF @ Vr=330V, M=50
+        # noise_current=0.8e-12,
+        noise_factor=2.2,
+        vb_ref=1800,  # reference bias for gain and junction cap.
+    ),
+    'Hama_S8550_APD' : ApdDiode(
+        name='Hama. S8550 4x8 APD',
+        qe=0.85,  # QE @ 650 nm
+        gain=50,  # gain @ Vr=330 V
+        darkcurrent_ref=1e-9,  # typ 1 nA, max 10 nA @ Vr=330V, M=50
+        junction_cap_ref=9e-12,  # typ 9 pF @ Vr=330V, M=50
+        noise_index=0.2,
+        vb_ref=330,  # reference bias for gain and junction cap.
+    ),
+}
