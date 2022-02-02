@@ -1,7 +1,10 @@
 .DS_Store
 __pycache__/
-workspace.code-workspace
+*.code-workspace
 
 /plots
+/data
 
 *.pdf
+*.csv
+*.png
