@@ -3,9 +3,8 @@ __pycache__/
 *.code-workspace
 .ipynb_checkpoints/
 
-
-/plots
-/data
+plots/
+data/
 
 *.pdf
 *.csv
