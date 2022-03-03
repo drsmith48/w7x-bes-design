@@ -6,7 +6,6 @@ Created on Thu Oct 31 13:51:23 2019
 @author: drsmith
 """
 
-import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import least_squares

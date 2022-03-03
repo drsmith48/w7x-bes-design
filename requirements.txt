@@ -1,0 +1,16 @@
+numpy
+scipy
+matplotlib
+
+#  conda-forge
+zeep
+
+# mdsplus.org
+MDSplus
+
+#  gitlab.com:mjgerard2/turbulence-optimization
+vtkTools
+vmecTools
+
+#  git.ipp-hgw.mpg.de:astechow/pcianalysis
+PCIanalysis
