@@ -39,9 +39,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import least_squares
 import scipy.constants as pc
+
 import hdf5
-from plasma_parameters import Params
 import PCIanalysis.gradientlengths as gl
+
+try:
+    from .utilities.plasma_parameters import Params
+except ImportError:
+    from w7x_bes_tools.utilities.plasma_parameters import Params
 
 
 np.random.seed()
@@ -525,7 +530,6 @@ class Profiles(object):
 if __name__=='__main__':
     plt.close('all')
     pro = Profiles()
-    # pro.plot_profiles(save=True)
-    pro.plot_profiles2(save=True)
-    pro = Profiles(1)
-    pro.plot_profiles2(save=True)
+    plt.ioff()  #  the `PCIanalysis` library sets `plt.ion()``
+    pro.plot_profiles2(save=False)
+    plt.show()

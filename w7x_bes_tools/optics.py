@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Fri May 22 07:56:39 2020
-
-@author: drsmith
-"""
-
 from pathlib import Path
 import numpy as np
 from scipy import interpolate
@@ -197,3 +189,4 @@ if __name__=='__main__':
     # calc_etendue(nfiber=11, fnum=2, diam=1.0)
     # calc_etendue(nfiber=9, fnum=1.5, diam=1.0)
     # calc_etendue(nfiber=1, na=0.25, diam=0.8)
+    plt.show()

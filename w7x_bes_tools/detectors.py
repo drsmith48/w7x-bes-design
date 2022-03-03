@@ -1,14 +1,10 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-from pathlib import Path
 import numpy as np
 import scipy.constants as pc
 
 
 # All inputs and outputs are in SI units:  W, A, V, F, Ohms, Hz, A^2/Hz, etc.
 # All noise terms are current noise power density (CNPD) with units A^2/Hz
-# For diodes, noise terms are output CNPD
+# For diodes, noise terms are output-referenced CNPD
 # For TIA, noise terms are input-referenced CNPD
 
 

@@ -13,7 +13,11 @@ from vtkTools import vtk_grids
 from vmecTools.wout_files import wout_read
 from vmecTools.wout_files import coord_convert
 from vmecTools.wout_files import curveB_tools
-import beams
+
+try:
+    from . import beams
+except ImportError:
+    from w7x import beams
 
 
 keys = ['R', 'Z', 'Jacobian', 'dR_ds', 'dR_du', 'dR_dv', 'dZ_ds', 'dZ_du', 'dZ_dv', 

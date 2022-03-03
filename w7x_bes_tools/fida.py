@@ -12,10 +12,17 @@ import csv
 import numpy as np
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
-from filters import make_filters
+
 from pyfidasim import load_dict
-import beams
-from grid import Grid
+
+try:
+    from .utilities.filters import make_filters
+    from . import beams
+    from .sightline_grid import Grid
+except ImportError:
+    from w7x_bes_tools.utilities.filters import make_filters
+    from w7x_bes_tools import beams
+    from w7x_bes_tools.sightline_grid import Grid
 
 
 class Fida(object):
@@ -401,6 +408,7 @@ if __name__ == '__main__':
     
     passband = [653,655.3]
     gridfile = 'data/grid_88_c2c10_P7_W30_R596_Z22_w7x_ref_29.pickle'
+    grid = Grid(load_file=gridfile)
     f.plot_beam_plane(gridfile=gridfile, 
                       passband=passband, 
                       zoom=True,
@@ -413,4 +421,6 @@ if __name__ == '__main__':
     # f.plot_radial_array(z=18, passband=passband, save=True)
     # f.plot_radial_array(z=22, passband=passband, save=True)
     # f.plot_radial_array(z=26, passband=passband, save=True)
+
+    plt.show()
     

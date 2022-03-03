@@ -11,7 +11,13 @@ import concurrent.futures
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-import beams
+
+try:
+    from . import beams
+    from . import sightline
+except ImportError:
+    from w7x_bes_tools import beams
+    from w7x_bes_tools import sightline
 
 
 class Grid(object):
@@ -111,7 +117,7 @@ class Grid(object):
                                                -(grid_shape[1]-1)/2*(1+1e-4), -1)
         else:
             print('Calculating sightline grid data')
-            self.central_ray = beams.Sightline(beam=beam, 
+            self.central_ray = sightline.Sightline(beam=beam, 
                                                port=port,
                                                r_obs=r_obs,
                                                z_obs=z_obs,
@@ -141,7 +147,7 @@ class Grid(object):
                                   'port':port,
                                   'r_obs':rgrid[inorm,ibi],
                                   'z_obs':zgrid[inorm,ibi]}
-                        futures[inorm,ibi] = pool.submit(beams.Sightline, **kwargs)
+                        futures[inorm,ibi] = pool.submit(sightline.Sightline, **kwargs)
                 for future in concurrent.futures.as_completed(futures.flatten().tolist()):
                     if future.exception():
                         raise ValueError
@@ -240,33 +246,6 @@ class Grid(object):
 
 if __name__=='__main__':
     plt.close('all')
-    # grid = Grid(beam=beams.HeatingBeam(pini=2),
-    #             port='A21-lolo',
-    #             r_obs=5.85, 
-    #             z_obs=-0.42,
-    #             c2c_normal=1.5)
-    # grid.plot(save=True)
-    # grid = Grid(beam=beams.HeatingBeam(pini=2),
-    #             port='A21-lolo',
-    #             r_obs=5.82, 
-    #             z_obs=-0.43,
-    #             c2c_normal=1.5,
-    #             eq_tag = 'w7x_ref_29')
-    # grid.plot(save=True)
-    # grid = Grid(beam=beams.HeatingBeam(pini=3),
-    #             port='W11',
-    #             r_obs=5.95, 
-    #             z_obs=-0.17,
-    #             c2c_normal=1.5,
-    #             eq_tag='w7x_ref_29')
-    # grid.plot(save=True)
-    # grid = Grid(beam=beams.HeatingBeam(pini=4),
-    #             port='W11',
-    #             r_obs=5.98, 
-    #             z_obs=-0.16,
-    #             c2c_normal=1.5,
-    #             eq_tag='w7x_ref_29')
-    # grid.plot(save=True)
     # grid = Grid(beam=beams.HeatingBeam(pini=6),
     #             port='A21-hihi',
     #             r_obs=5.82, 
@@ -274,12 +253,13 @@ if __name__=='__main__':
     #             c2c_normal=1.5,
     #             eq_tag = 'w7x_ref_29')
     # grid.plot(save=True)
-    # grid = Grid(beam=beams.HeatingBeam(pini=7),
-    #             port='W30',
-    #             r_obs=5.99, 
-    #             z_obs=0.15,
-    #             c2c_normal=1,
-    #             eq_tag='w7x_ref_29')
-    # grid.plot(save=True)
-    grid2 = Grid(load_file='data/grid_88_c2c10_P7_W30_R596_Z22_w7x_ref_29.pickle')
-    grid2.plot(save=True)
+    grid = Grid(beam=beams.HeatingBeam(source=7),
+                port='W30',
+                r_obs=5.96, 
+                z_obs=0.22,
+                c2c_normal=1,
+                eq_tag='w7x_ref_29')
+    # grid = Grid(load_file="data/grid_88_c2c10_P7_W30_R599_Z15_w7x_ref_29.pickle")
+    grid.plot(save=False)
+    plt.show()
+# grid_88_c2c10_P7_W30_R596_Z22_w7x_ref_29

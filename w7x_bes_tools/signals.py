@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Jun 15 15:37:49 2020
-
-@author: drsmith
-"""
-
 from pathlib import Path
 import numpy as np
 import scipy.constants as pc
@@ -27,15 +19,17 @@ class Emitter(object):
         print(f'  Port-beam distance: {self.distance:.1f} cm')
         print(f'  Aperture diameter: {self.aperture:.1f} cm')
         print(f'  Numerical aperture: {self.NA:.3g}')
-        
-        self.spot_diameter = np.linspace(1, 2)  # cm
 
-        emitter_area = np.pi * (self.spot_diameter/2)**2 * 1e2  # mm^2
-        self.etendue = np.pi * emitter_area * self.NA**2  # mm^2-ster
+    def calc_etendue(self, spot_diameter):
+        emitter_area = np.pi * (spot_diameter/2)**2 * 1e2  # mm^2
+        etendue = np.pi * emitter_area * self.NA**2  # mm^2-ster
+        return etendue
     
     def plot_etendue(self, save=False):
+        spot_diameter = np.linspace(1, 2)
+        etendue = self.calc_etendue(spot_diameter)
         plt.figure(figsize=(4,3))
-        plt.plot(self.spot_diameter, self.etendue)
+        plt.plot(spot_diameter, etendue)
         plt.xlabel('Spot diameter (cm)')
         plt.ylabel('Etendue (mm**2-ster)')
         plt.title(f'{self.aperture:.1f} cm dia. aper. | {self.distance:.0f} cm distance')
@@ -60,10 +54,7 @@ class Diode(object):
                  aperture=8.0,  # port aperture diameter (cm)
                  ):
         
-        self.emitter = Emitter(distance=distance,
-                               aperture=aperture)
-        self.spot_diameter = self.emitter.spot_diameter
-        self.etendue = self.emitter.etendue
+        self.emitter = Emitter(distance=distance, aperture=aperture)
         
         self.t_op = t_op
         self.t_ref = t_ref
@@ -79,58 +70,58 @@ class Diode(object):
         print(f'  Responsivity: {self.responsivity:.2f} A/W')
         print(f'  Bandwidth: {self.bandwidth/1e6:.1f} MHz')
         print(f'  Feedback resistor: {self.r_feedback/1e6:.1f} MOhm')
-        
+
+    def plot_diode_response(self, save=False):
         photon_wavelength = 656e-9  # wavelength (m)
         photon_energy = pc.h * pc.c / photon_wavelength  # energy per photon (J)
     
-        self.radiance = np.linspace(0.4, 1.2)*1e18  # photons/s/m**2/ster
+        spot_diameter = np.linspace(1, 2)
+        etendue = self.emitter.calc_etendue(spot_diameter)
+
+        radiance = np.linspace(0.4, 1.2)*1e18  # photons/s/m**2/ster
 
         # incident power at colleciton aperture
-        p_incident = photon_energy * np.matmul(self.radiance.reshape(-1,1), 
-                                               self.etendue.reshape(1,-1)) / 1e6  # W
+        p_incident = photon_energy * np.matmul(radiance.reshape(-1,1), 
+                                               etendue.reshape(1,-1)) / 1e6  # W
         
-        self.transmission = 0.5
+        transmission = 0.5
         # 50% transmission
-        self.p_diode = self.transmission * p_incident
+        p_diode = transmission * p_incident
         # diode photocurrent
-        self.i_photo = self.responsivity * self.p_diode
+        i_photo = self.responsivity * p_diode
         # diode dark current
         i_dark = self.dark_current_ref * 2**((self.t_op-self.t_ref)/10)
         print(f'  Dark current @ T_op: {i_dark*1e9:.4f} nA')
         # diode thermal noise from feedback resistor
-        self.isq_thermal = 4*pc.k*(self.t_op+273)/self.r_feedback * self.bandwidth
-        print(f'  Feedback resistor thermal noise: {np.sqrt(self.isq_thermal)*1e9:.3f} nA')
+        isq_thermal = 4*pc.k*(self.t_op+273)/self.r_feedback * self.bandwidth
+        print(f'  Feedback resistor thermal noise: {np.sqrt(isq_thermal)*1e9:.3f} nA')
         # diode shot noise from current
-        self.isq_shot = 2 * pc.e * (self.i_photo+i_dark) * self.bandwidth
+        isq_shot = 2 * pc.e * (i_photo+i_dark) * self.bandwidth
         # net noise
-        self.i_noise = np.sqrt(self.isq_thermal + self.isq_shot)
+        i_noise = np.sqrt(isq_thermal + isq_shot)
         # signal-to-noise in photocurrent
-        self.i_snr = self.i_photo / self.i_noise
-        
-    def plot_etendue(self, save=False):
-        self.emitter.plot_etendue(save=save)
-        
-    def plot_diode_response(self, save=False):
+        i_snr = i_photo / i_noise
+
         ncols, nrows = 3, 2
         fig, axes = plt.subplots(ncols=ncols,
                                  nrows=nrows, 
                                  figsize=(ncols*4,nrows*3))
         
         plt.sca(axes.flat[0])
-        plt.contourf(self.spot_diameter, 
-                     self.radiance/1e18, 
-                     self.p_diode*1e9,
+        plt.contourf(spot_diameter, 
+                     radiance/1e18, 
+                     p_diode*1e9,
                      levels=4,
                      cmap='viridis')
         plt.colorbar(label='Flux (nW)')
         plt.xlabel('Spot diameter (cm)')
         plt.ylabel('Radiance (1e18 ph/s/m**2/st)')
-        plt.title(f'Flux on diode ({self.transmission*1e2:.0f}% trans.)')
+        plt.title(f'Flux on diode ({transmission*1e2:.0f}% trans.)')
         
         plt.sca(axes.flat[1])
-        plt.contourf(self.spot_diameter, 
-                     self.radiance/1e18, 
-                     self.i_photo*1e9,
+        plt.contourf(spot_diameter, 
+                     radiance/1e18, 
+                     i_photo*1e9,
                      levels=4,
                      cmap='viridis')
         plt.colorbar(label='Photocurrent (nA)')
@@ -139,9 +130,9 @@ class Diode(object):
         plt.title('Photocurrent')
         
         plt.sca(axes.flat[2])
-        plt.contourf(self.spot_diameter, 
-                     self.radiance/1e18, 
-                     self.i_noise*1e9,
+        plt.contourf(spot_diameter, 
+                     radiance/1e18, 
+                     i_noise*1e9,
                      levels=4,
                      cmap='viridis')
         plt.colorbar(label='Noise current (nA)')
@@ -150,9 +141,9 @@ class Diode(object):
         plt.title('Noise current (shot+therm)')
         
         plt.sca(axes.flat[3])
-        plt.contourf(self.spot_diameter, 
-                     self.radiance/1e18, 
-                     np.sqrt(self.isq_shot)*1e9,
+        plt.contourf(spot_diameter, 
+                     radiance/1e18, 
+                     np.sqrt(isq_shot)*1e9,
                      levels=4,
                      cmap='viridis')
         plt.colorbar(label='Shot noise (nA)')
@@ -161,9 +152,9 @@ class Diode(object):
         plt.title('Shot noise')
         
         plt.sca(axes.flat[4])
-        plt.contourf(self.spot_diameter, 
-                     self.radiance/1e18, 
-                     self.i_snr,
+        plt.contourf(spot_diameter, 
+                     radiance/1e18, 
+                     i_snr,
                      levels=4,
                      cmap='viridis')
         plt.colorbar(label='SNR')
