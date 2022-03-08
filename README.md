@@ -19,4 +19,4 @@
 - `utilities/`
     - Helper modules
 
-`notebooks/` contains analysis code and Juptyer notebooks.
+`analysis/` contains analysis code and Juptyer notebooks.
