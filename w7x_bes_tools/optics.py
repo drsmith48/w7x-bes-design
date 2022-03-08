@@ -163,7 +163,7 @@ def plot(spot_distance=180.0,
     if save:
         fname = Path('plots') / 'optics-calculations.pdf'
         print(f'Save file: {fname.as_posix()}')
-        plt.savefig(fname.as_posix(), transparent=True)
+        plt.savefig(fname.as_posix(), format='pdf', transparent=True)
     
 
 def calc_etendue(nfiber=1, na=0.25, fnum=None, diam=1.0):
@@ -184,7 +184,7 @@ if __name__=='__main__':
     plt.close('all')
     plot(spot_distance=230, 
          target_spotsize=1.4,
-         save=True)
+         save=False)
     # calc_etendue(nfiber=4, fnum=2, diam=1.0)
     # calc_etendue(nfiber=11, fnum=2, diam=1.0)
     # calc_etendue(nfiber=9, fnum=1.5, diam=1.0)

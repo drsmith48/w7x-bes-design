@@ -17,7 +17,7 @@ from vmecTools.wout_files import curveB_tools
 try:
     from . import beams
 except ImportError:
-    from w7x import beams
+    from w7x_bes_tools import beams
 
 
 keys = ['R', 'Z', 'Jacobian', 'dR_ds', 'dR_du', 'dR_dv', 'dZ_ds', 'dZ_du', 'dZ_dv', 
