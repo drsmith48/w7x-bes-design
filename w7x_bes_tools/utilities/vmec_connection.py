@@ -71,6 +71,7 @@ def test():
         ax.set_aspect('equal')
     
     plt.tight_layout()
+    plt.show()
 
 
 if __name__=='__main__':
