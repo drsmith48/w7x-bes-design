@@ -2,6 +2,7 @@
 __pycache__/
 *.code-workspace
 .ipynb_checkpoints/
+.idea/
 
 plots/
 data/

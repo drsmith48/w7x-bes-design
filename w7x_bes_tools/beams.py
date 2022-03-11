@@ -424,8 +424,8 @@ class _Beam(object):
             plt.annotate('{} @ {:.1f} keV'.format(self.species, self.voltage/1e3),
                          [0.03,0.92], xycoords='axes fraction')
         if zoom:
-            xlim = [5.85,6.05]
-            ylim = [0.14,0.3]
+            xlim = [5.8,6.05]
+            ylim = [0.11,0.35]
             for ax in [ax1, ax2]:
                 if ax is None:
                     continue

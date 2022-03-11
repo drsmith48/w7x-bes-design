@@ -36,7 +36,7 @@ class Fida(object):
             else:
                 simdir = self.workdir/simdir
         else:
-            simdir = self.workdir / 'A21_HIHI_P6_Z46'
+            simdir = self.workdir / 'A21_HIHI_P6'
         assert(simdir.exists())
         print('FIDASIM results: {}'.format(simdir.as_posix()))
         self.simname = simdir.name
@@ -236,8 +236,8 @@ class Fida(object):
                         colors='k',
                         levels=psi_levels)
             if zoom:
-                xlim = [5.85,6.05]
-                ylim = [0.14,0.3]
+                xlim = [5.8,6.05]
+                ylim = [0.11,0.35]
             else:
                 xlim = plt.gca().get_xlim()
                 ylim = plt.gca().get_ylim()
