@@ -14,7 +14,9 @@ class Emitter(object):
         self.distance = distance
         self.aperture = aperture
         self.NA = (self.aperture/2) / self.distance
-        
+
+        self.spot_diameter = np.linspace(1, 2)
+
         print('Emitter specifications')
         print(f'  Port-beam distance: {self.distance:.1f} cm')
         print(f'  Aperture diameter: {self.aperture:.1f} cm')
@@ -26,7 +28,6 @@ class Emitter(object):
         return etendue
     
     def plot_etendue(self, save=False):
-        self.spot_diameter = np.linspace(1, 2)
         etendue = self.calc_etendue()
         plt.figure(figsize=(4,3))
         plt.plot(self.spot_diameter, etendue)
