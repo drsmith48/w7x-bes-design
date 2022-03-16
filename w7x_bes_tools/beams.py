@@ -388,7 +388,7 @@ class _Beam(object):
         vpar = self.vbeam * np.sum(sl_hat*tiled_rhat, axis=0)
         vperp  = np.sqrt(self.vbeam**2 - vpar**2)
         # print(f'Avg full-energy para. velocity = {vpar.mean():.3g} m/s')
-        print(f'Avg full-energy perp. velocity = {vperp.mean():.3g} m/s')
+        # print(f'Avg full-energy perp. velocity = {vperp.mean():.3g} m/s')
         sl_beam_offnorm = np.arctan2(np.abs(vpar.mean()), vperp.mean())
         print(f'SL/beam off-normal angle = {sl_beam_offnorm*180/np.pi:.2f} deg')
         lifetime_travel = vperp.mean()*10e-9

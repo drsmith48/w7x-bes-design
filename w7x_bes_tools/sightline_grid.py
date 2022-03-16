@@ -42,7 +42,7 @@ class Grid(object):
             identifier='tmp'
         else:
             # grid file not specified
-            assert(isinstance(beam, beams._Beam))
+            assert isinstance(beam, beams._Beam)
             if eq_tag is not None and eq_tag!=beam.eq_tag:
                 beam.set_eq(eq_tag=eq_tag)
             eq_tag = beam.eq_tag
@@ -57,7 +57,8 @@ class Grid(object):
                 port[0:3],
                 np.round(r_obs*1e2), 
                 np.round(z_obs*1e2),
-                beam.eq_tag)
+                beam.eq_tag,
+                )
         # set data file
         if load_file:
             identifier_file = load_file
@@ -169,6 +170,25 @@ class Grid(object):
         self.r_obs = r_obs
         self.z_obs = z_obs
         self.identifier = identifier
+        def print_ray(ray):
+            imax = ray.imax
+            print(
+                f'    {ray.r[imax]:.3f}, '
+                f'{ray.z[imax]:.3f}, '
+                f'{ray.phi[imax]*(180/np.pi):.2f}, '
+                f'{ray.xyz[0,imax]:.3f}, '
+                f'{ray.xyz[1,imax]:.3f}'
+            )
+        print('Sightline grid:  R (m), Z(m), phi (deg), X (m), Y (m)')
+        print('  Central ray')
+        print_ray(self.central_ray)
+        print('  Grid corners')
+        for ray in [self.sightlines[0,0], 
+                    self.sightlines[-1,0], 
+                    self.sightlines[0,-1], 
+                    self.sightlines[-1,-1]]:
+            print_ray(ray)
+
     
     def plot(self, save=False):
         plt.figure(figsize=(4.5*3,3.3*2))
@@ -184,8 +204,8 @@ class Grid(object):
         ax3 = plt.subplot(232)
         max_bi_excursion = 0
         max_rad_excursion = 0
-        max_psi = 0
-        min_psi = 1
+        # max_psi = 0
+        # min_psi = 1
         for inorm in np.arange(self.grid_shape[0]):
             for ibi in np.arange(self.grid_shape[1]):
                 sl = self.sightlines[inorm,ibi]
@@ -210,9 +230,12 @@ class Grid(object):
         max_rad_excursion = np.max([sl.norm_half_excursion*1e2*2 for sl in self.sightlines.flat])
         max_bi_excursion = np.max([sl.binorm_half_excursion*1e2*2 for sl in self.sightlines.flat])
         print(f'Max rad/binorm excursion (cm): {max_rad_excursion:.2f} {max_bi_excursion:.2f}')
-        max_psi = np.max([sl.psinorm[sl.imax] for sl in self.sightlines.flat])
         min_psi = np.min([sl.psinorm[sl.imax] for sl in self.sightlines.flat])
+        max_psi = np.max([sl.psinorm[sl.imax] for sl in self.sightlines.flat])
+        max_r = np.max([sl.r[sl.imax] for sl in self.sightlines.flat])
+        min_r = np.min([sl.r[sl.imax] for sl in self.sightlines.flat])
         print(f'Min/max psinorm: {min_psi:.2f} {max_psi:.2f}')
+        print(f"Min/max R (m): {min_r:.2f} {max_r:.2f}")
         plt.sca(ax1)
         plt.xlim(-8,8)
         plt.ylim(-8,8)
@@ -236,6 +259,10 @@ class Grid(object):
         plt.title('Beam-weighted ray localization')
         plt.xlabel('Radial excursion (cm)')
         plt.ylabel('Binormal excursion (cm)')
+        plt.annotate('Smaller sightline excursions are better', 
+            (0.05,0.03), 
+            xycoords='axes fraction',
+            fontsize='small')
         plt.legend()
         plt.tight_layout()
         if save:

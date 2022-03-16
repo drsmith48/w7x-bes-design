@@ -110,7 +110,7 @@ class Fida(object):
             nrow = ilos.size // ncol
             if ilos.size % ncol:
                 nrow += 1
-            plt.figure(figsize=[4.5*ncol,2.7*nrow])
+            plt.figure(figsize=[4*ncol,3*nrow])
         if plot_filters:
             with open('Alluxa-PBvsAOI.csv') as csvfile:
                 reader = csv.DictReader(csvfile, 
@@ -285,6 +285,7 @@ class Fida(object):
         plt.plot(r_array, density_rz.sum(axis=1)*self.grid3d['dZ'])
         plt.legend(['full', 'half', 'third', 'halo'])
         plt.xlabel('Radius (m)')
+        plt.xlim((5.2,None))
         plt.ylabel('Integ. density (1/cm)')
         plt.title(f'State densities | {self.simname}')
         # contour plot beam emission and halo emission
