@@ -517,11 +517,11 @@ class _Beam(object):
         if self.src_width_2:
             # rectangular source with analytic formula
             a = r * self.tantheta
-            s_sq = (2*self.src_width_1) * (2*self.src_width_2)
+            # s_sq = (2*self.src_width_1) * (2*self.src_width_2)
             intensity = (sp.erf((self.src_width_1-s)/a) + 
                          sp.erf((self.src_width_1+s)/a)) * \
                         (sp.erf((self.src_width_2-t)/a) + 
-                         sp.erf((self.src_width_2+t)/a)) / (4*s_sq)
+                         sp.erf((self.src_width_2+t)/a)) / 4 #/ (4*s_sq)
         else:
             # circular source
             r_sq = s**2 + t**2
@@ -566,8 +566,8 @@ class _Beam(object):
                                    # assume_sorted=True)
             profile2d = f_interp(np.sqrt(svalues**2 + tvalues**2))
         # profile should sum to 1
-        profile2d *= resolution**2
-        assert(np.allclose(profile2d.sum(),1,rtol=1e-3))
+        # profile2d *= resolution**2
+        # assert(np.allclose(profile2d.sum(),1,rtol=1e-3))
         return sgrid, tgrid, profile2d
             
     @staticmethod

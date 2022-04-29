@@ -77,7 +77,7 @@ def plot_beam_distributions():
         sg,tg,pro2d = hb.profile(axial_dist=ax_dist, gridsize=0.5)
         plt.figure()
         plt.contourf(sg,tg,pro2d, levels=12)
-        plt.clim(0,0.003)
+        # plt.clim(0,0.003)
         plt.gca().set_aspect('equal')
         plt.title('{} | ax dist. = {:.1f} m'.format(hb.name, ax_dist))
         plt.xlabel('source horizontal direction (m)')
