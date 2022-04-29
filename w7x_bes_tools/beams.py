@@ -733,10 +733,11 @@ if __name__=='__main__':
     plt.close('all')
     
     p2 = HeatingBeam(source=7, eq_tag='w7x_ref_29')
-    p2.plot_beam_axis(save=True)
-    p2.plot_beam_plane(
-        port='W30', 
-        save=True, 
-        zoom=False,
-    )
+    # p2.plot_beam_axis(save=True)
+    # p2.plot_beam_plane(
+    #     port='W30', 
+    #     save=True, 
+    #     zoom=False,
+    # )
+    p2.profile()
     plt.show()

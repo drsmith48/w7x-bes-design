@@ -8,8 +8,8 @@ Created on Tue Nov  5 14:47:25 2019
 
 import numpy as np
 import matplotlib.pyplot as plt
-import vmec_connection
-import beams
+from w7x_bes_tools.utilities import vmec_connection
+from w7x_bes_tools import beams
 
 # vmec connection
 
@@ -59,21 +59,21 @@ def plot_heating_beams():
 
 def plot_beam_distributions():
     hb = beams.HeatingBeam()
-    rb = beams.RudixBeam()
-    for beam,gridsize,res in zip([hb,rb], [0.8,0.5], [0.02,0.01]):
-        sg,tg,pro2d = beam.profile(axial_dist=2, 
-                                   gridsize=gridsize, 
-                                   resolution=res)
-        plt.figure()
-        plt.contourf(sg,tg,pro2d, levels=12)
-        plt.clim(0,0.003)
-        plt.gca().set_aspect('equal')
-        plt.title(beam.name+' | profile 2 m from source')
-        plt.xlabel('source horizontal direction (m)')
-        plt.ylabel('source verticle direction (m)')
-        plt.colorbar()
-        plt.tight_layout()
-    for ax_dist in [5.0,8.0]:
+    # rb = beams.RudixBeam()
+    # for beam,gridsize,res in zip([hb,rb], [0.8,0.5], [0.02,0.01]):
+    #     sg,tg,pro2d = beam.profile(axial_dist=2, 
+    #                                gridsize=gridsize, 
+    #                                resolution=res)
+    #     plt.figure()
+    #     plt.contourf(sg,tg,pro2d, levels=12)
+    #     plt.clim(0,0.003)
+    #     plt.gca().set_aspect('equal')
+    #     plt.title(beam.name+' | profile 2 m from source')
+    #     plt.xlabel('source horizontal direction (m)')
+    #     plt.ylabel('source verticle direction (m)')
+    #     plt.colorbar()
+    #     plt.tight_layout()
+    for ax_dist in [2.0, 5.0, 8.0]:
         sg,tg,pro2d = hb.profile(axial_dist=ax_dist, gridsize=0.5)
         plt.figure()
         plt.contourf(sg,tg,pro2d, levels=12)
@@ -84,9 +84,10 @@ def plot_beam_distributions():
         plt.ylabel('source verticle direction (m)')
         plt.colorbar()
         plt.tight_layout()
+    plt.show()
     
 
-pinis = [beams.HeatingBeam(pini=pini) for pini in [1,2,3,4]]
+pinis = [beams.HeatingBeam(source=pini) for pini in [1,2,3,4]]
 
 
 def beam_axis_calculations(pini=2, noplot=False, save=False):
@@ -123,7 +124,7 @@ def sightline_calculations(save=False):
 if __name__=='__main__':
     plt.close('all')
     # plot_heating_beams()
-    # plot_beam_distributions()
+    plot_beam_distributions()
     # beam_axis_calculations()
-    beam_plane_calculations()
+    # beam_plane_calculations()
     # sightline_calculations()
