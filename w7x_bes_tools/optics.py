@@ -85,13 +85,13 @@ class FiberImage(object):
         self.D = D
         
         
-def plot(spot_distance=180.0, 
+def plot(spot_distance=230.0, 
          target_spotsize=1.4, 
          save=False):
     fiber_diameters = np.array([0.8,1.0,1.2,1.5,1.8])
 
-    na_values = [0.25, 0.2, 0.15]
-    lens_values = [8]
+    na_values = [0.2, 0.15, 0.1]
+    lens_values = [5]
     
     plt.figure(figsize=[7.5, 3.25])
     ax_etendue = plt.subplot(1,2,len(lens_values)+1)
@@ -109,7 +109,7 @@ def plot(spot_distance=180.0,
             spot_diameters = [image.spot_diameter for image in images]
             efl = images[0].efl
             demag = 10*spot_diameters[0]/fiber_diameters[0]
-            label = f'Fiber NA = {na:.2f}\nEFL = {efl:.1f} cm\nDemag = {demag:.1f}'
+            label = f'Fiber NA = {na:.2f}\nEFL = {efl:.1f} cm\nDemag = {demag:.2f}'
             plt.plot(fiber_diameters, 
                      spot_diameters, 
                      marker='x', 
@@ -138,12 +138,12 @@ def plot(spot_distance=180.0,
                                                etendue,
                                                kind='quadratic',
                                                assume_sorted=True)
-            target_fiber_diam = fd_interp(target_spotsize)
-            target_etendue = eten_interp(target_fiber_diam)
-            print(f'  Spot size {target_spotsize:.1f} cm -> fiber diameter {target_fiber_diam:.2f} mm -> etendue {target_etendue:.3f} mm^2-ster')
+            # target_fiber_diam = fd_interp(target_spotsize)
+            # target_etendue = eten_interp(target_fiber_diam)
+            # print(f'  Spot size {target_spotsize:.1f} cm -> fiber diameter {target_fiber_diam:.2f} mm -> etendue {target_etendue:.3f} mm^2-ster')
             if na==na_values[0]:
                 plt.axhline(target_spotsize, ls=':', c='k')
-            plt.axvline(target_fiber_diam, ls=':', c='k')
+            # plt.axvline(target_fiber_diam, ls=':', c='k')
             if iplot==0:
                 plt.sca(ax_etendue)
                 plt.plot(fiber_diameters,
@@ -156,9 +156,9 @@ def plot(spot_distance=180.0,
                 plt.ylabel('Etendue (mm**2-ster)')
                 # plt.xlim([-0.08,None])
                 plt.title('Optical throughput')
-                plt.axvline(target_fiber_diam, ls=':', c='k')
-                if na==na_values[0]:
-                    plt.axhline(target_etendue, ls=':', c='k')
+                # plt.axvline(target_fiber_diam, ls=':', c='k')
+                # if na==na_values[0]:
+                    # plt.axhline(target_etendue, ls=':', c='k')
     plt.tight_layout()
     if save:
         fname = Path('plots') / 'optics-calculations.pdf'
